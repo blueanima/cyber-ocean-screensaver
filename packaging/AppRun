@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+set -euo pipefail
+HERE="$(dirname "$(readlink -f "$0")")"
+ROOT="$(readlink -f "$HERE/usr/share/cyber-ocean")"
+PY="$HERE/usr/python/bin/python3"
+if [[ ! -x "$PY" ]]; then
+  PY="$(command -v python3)"
+fi
+export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
+cd "$ROOT"
+if [[ $# -eq 0 ]]; then
+  exec "$PY" "$ROOT/main.py" --screensaver
+fi
+if [[ "$1" == "--gallery" ]]; then
+  shift
+  exec "$PY" "$ROOT/main.py" "$@"
+fi
+exec "$PY" "$ROOT/main.py" "$@"

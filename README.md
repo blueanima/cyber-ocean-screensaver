@@ -26,14 +26,44 @@ python3 main.py --screensaver
 
 移动鼠标或按任意键退出。Move the mouse or press any key to exit.
 
+Linux 屏保会铺满整个屏幕（系统全屏窗口，没有地址栏和标签页）。  
+The Linux screensaver covers the whole screen in a native fullscreen window — not a browser tab.
+
 | 命令 Command | 中文 | English |
 | --- | --- | --- |
 | `python3 main.py --screensaver` | 屏幕保护（键鼠退出） | Screensaver (input exits) |
 | `python3 main.py --wallpaper` | 壁纸 / 展览（键鼠不退出） | Wallpaper / exhibit (input stays) |
 | `python3 main.py` | 集合馆、赛博海洋、分步讲解 | Gallery, ocean, step-by-step lesson |
 
-需要 Chrome / Edge / Chromium / Firefox 才能全屏 kiosk；否则打开普通标签页，可按 `F11`。  
-A kiosk browser is required for true fullscreen; otherwise open a tab and press `F11`.
+集合馆仍可用浏览器打开。屏保模式不再弹出网页标签。  
+Gallery still uses a browser. Screensaver mode does not open a web page.
+
+## 成品包 / Ready-made builds
+
+GitHub Actions 会在打 `v*` 标签或手动 Run workflow 后生成：
+
+| 文件 File | 说明 |
+| --- | --- |
+| `CyberOcean-*-x86_64.AppImage` | Linux 可直接运行（内置 Python） |
+| `CyberOcean-portable-*.zip` | 跨平台源码包 + 启动脚本 + 离线 HTML |
+| `CyberOcean.scr` | Windows 屏幕保护 |
+| `screensaver.html` / `wallpaper.html` | 双击用浏览器打开 |
+
+本地打包：
+
+```bash
+chmod +x scripts/build-release.sh packaging/AppRun
+VERSION=1.0.0 ./scripts/build-release.sh
+./dist/CyberOcean-*-x86_64.AppImage          # 屏保
+./dist/CyberOcean-*-x86_64.AppImage --gallery
+./dist/CyberOcean-*-x86_64.AppImage --wallpaper
+```
+
+GitHub 直连失败时，脚本会走 `gh` API 或 `ghfast.top` 镜像。只要系统已有 Python 3.10+，也可以 `SYSTEM_PYTHON=1 ./scripts/build-release.sh`。
+
+AppImage 默认进入全屏屏保（铺满屏幕的系统窗口）。集合馆用 `--gallery`。  
+The AppImage opens a native fullscreen screensaver. Use `--gallery` for the browser gallery.
+
 
 ## 图例怎么读 / How to read the legend
 

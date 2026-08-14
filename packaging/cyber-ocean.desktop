@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Cyber Ocean
+Name[zh_CN]=赛博海洋馆
+Comment=Parametric sea-life screensaver
+Comment[zh_CN]=公式生物海洋馆屏幕保护
+Exec=cyber-ocean
+Icon=cyber-ocean
+Terminal=false
+Categories=Graphics;
+StartupNotify=false
+X-AppImage-Name=CyberOcean

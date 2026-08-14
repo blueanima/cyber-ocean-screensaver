@@ -1,0 +1,71 @@
+name: Release packages
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  linux-appimage:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Tools
+        run: sudo apt-get update && sudo apt-get install -y zip curl
+      - name: Build
+        run: |
+          chmod +x scripts/build-release.sh packaging/AppRun
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            export VERSION="${GITHUB_REF_NAME#v}"
+          else
+            export VERSION="${GITHUB_SHA::7}"
+          fi
+          ./scripts/build-release.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CyberOcean-linux
+          path: |
+            dist/*.AppImage
+            dist/*.zip
+            dist/*.html
+            dist/SHA256SUMS
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.AppImage
+            dist/*.zip
+            dist/screensaver.html
+            dist/wallpaper.html
+            dist/SHA256SUMS
+
+  windows-scr:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PyInstaller
+        run: python -m pip install --upgrade pip pyinstaller
+      - name: Build screensaver
+        run: python -m PyInstaller --noconfirm --clean --onefile --noconsole --name CyberOcean main.py
+      - name: Rename to .scr
+        run: Copy-Item dist/CyberOcean.exe dist/CyberOcean.scr
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CyberOcean-windows-screensaver
+          path: dist/CyberOcean.scr
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/CyberOcean.scr

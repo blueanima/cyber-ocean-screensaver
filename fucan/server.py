@@ -74,7 +74,6 @@ class FucanHandler(BaseHTTPRequestHandler):
             return
 
         if path in ("/screensaver", "/screensaver.html"):
-            importlib.reload(gallery)
             html = gallery.INDEX_HTML.replace("<body>", '<body data-mode="saver">', 1)
             self._send(200, html.encode("utf-8"), "text/html; charset=utf-8")
             return
@@ -161,14 +160,13 @@ def run_server(
 
 def _open_kiosk_or_tab(url: str, fallback_tab: bool) -> None:
     from .kiosk import launch_kiosk, watch_kiosk_then
-    import webbrowser
 
     if launch_kiosk(url):
         watch_kiosk_then(_request_shutdown)
         return
-    print("未找到 Chrome / Edge / Firefox，改为普通标签页。可按 F11 全屏。")
-    if fallback_tab:
-        webbrowser.open(url)
+    print("无法进入全屏屏保：需要 WebKitGTK，或 Chrome / Edge / Firefox。")
+    print("未打开普通网页标签。可用 --gallery 在浏览器里预览。")
+    _request_shutdown()
 
 
 _ = BeidouParams

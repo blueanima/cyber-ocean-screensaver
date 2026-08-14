@@ -27,7 +27,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
     body.saver .info,
     body.saver .formula,
     body.saver .strip { display: none !important; }
-    body.saver, body.saver canvas { cursor: none; }
+    body.saver, body.saver canvas { cursor: none; user-select: none; }
     body.ocean:not(.saver) canvas.legend-hit { cursor: pointer; }
     .topbar {
       position: fixed; top: 0; left: 0; right: 0; z-index: 3;
@@ -157,6 +157,15 @@ INDEX_HTML = r"""<!DOCTYPE html>
   if (SAVER || WALLPAPER) {
     document.body.classList.add("saver", "ocean");
     document.title = SAVER ? "赛博海洋馆 · Cyber Ocean Screensaver" : "赛博海洋馆 · Cyber Ocean";
+    document.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+    function goFull() {
+      var el = document.documentElement;
+      var fn = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen;
+      if (fn) { try { fn.call(el); } catch (err) {} }
+    }
+    goFull();
+    setTimeout(goFull, 250);
+    setTimeout(goFull, 1200);
   }
   var SHOT = /(?:[?&]shot=1\b)/.test(location.search);
   var seedMatch = location.search.match(/[?&]seed=(\d+)/);
@@ -652,7 +661,14 @@ INDEX_HTML = r"""<!DOCTYPE html>
   var pointerX = 0.5, pointerY = 0.5, pointerDown = 0;
   var legendGeom = null, legendOff = null, legendOffCtx = null, legendScan = 0;
   var cv = document.getElementById("cv");
-  var ctx = cv.getContext("2d", { alpha: false });
+  var ctx = cv.getContext("2d", { alpha: false, desynchronized: true })
+    || cv.getContext("2d", { alpha: false });
+  var targetFps = (SAVER || WALLPAPER) ? 30 : 48;
+  var frameMin = 1000 / targetFps;
+  var fillBoost = 0;
+  var oceanFrame = 0;
+  var bgGrad = null, bgGradH = -1;
+  var vigGrad = null, vigW = -1, vigH = -1;
 
   function mulberry32(a) {
     return function () {
@@ -831,7 +847,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
   }
   function pickLegend(e) {
     if (idx >= 0 || !legendGeom || !oceanInst.length) return -1;
-    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var dpr = maxDpr();
     var x = e.clientX * dpr, y = e.clientY * dpr;
     var L = legendGeom;
     if (x < L.x0 || x > L.x0 + L.boxW || y < L.y0 || y > L.y0 + L.boxH) return -1;
@@ -841,7 +857,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
   }
   function pickOcean(e, radiusMul) {
     if (idx >= 0 || !oceanInst.length) return -1;
-    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var dpr = maxDpr();
     var x = e.clientX * dpr, y = e.clientY * dpr;
     var best = -1, bestD = 1e12, k, inst, d, lim;
     for (k = 0; k < oceanInst.length; k++) {
@@ -887,15 +903,18 @@ INDEX_HTML = r"""<!DOCTYPE html>
     return { x0: x0, y0: y0, boxW: boxW, boxH: boxH, rowH: rowH, head: head, n: n };
   }
 
-  function ensureLegendOff(bw, bh) {
+  function ensureLegendOff(bw, bh, clear) {
     if (!legendOff) legendOff = document.createElement("canvas");
     if (legendOff.width !== (bw | 0) || legendOff.height !== (bh | 0)) {
       legendOff.width = bw | 0;
       legendOff.height = bh | 0;
+      clear = true;
     }
     legendOffCtx = legendOff.getContext("2d");
-    legendOffCtx.setTransform(1, 0, 0, 1, 0, 0);
-    legendOffCtx.clearRect(0, 0, legendOff.width, legendOff.height);
+    if (clear) {
+      legendOffCtx.setTransform(1, 0, 0, 1, 0, 0);
+      legendOffCtx.clearRect(0, 0, legendOff.width, legendOff.height);
+    }
   }
 
   function legendHighlight() {
@@ -989,24 +1008,30 @@ INDEX_HTML = r"""<!DOCTYPE html>
   }
 
   function drawOceanBg(w, h, now, dpr) {
-    var g = ctx.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0, "#04140c");
-    g.addColorStop(0.22, "#031018");
-    g.addColorStop(0.55, "#02101c");
-    g.addColorStop(1, "#01060a");
-    ctx.fillStyle = g;
+    if (!bgGrad || bgGradH !== h) {
+      bgGradH = h;
+      bgGrad = ctx.createLinearGradient(0, 0, 0, h);
+      bgGrad.addColorStop(0, "#04140c");
+      bgGrad.addColorStop(0.22, "#031018");
+      bgGrad.addColorStop(0.55, "#02101c");
+      bgGrad.addColorStop(1, "#01060a");
+    }
+    ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, w, h);
 
     var horizon = h * 0.36;
     var vpX = w * (0.5 + (pointerX - 0.5) * 0.08);
     var i, x, y;
+    var saver = SAVER || WALLPAPER;
+    var nRay = saver ? 2 : 5;
+    var nGrid = saver ? 8 : 16;
 
     ctx.save();
     ctx.globalCompositeOperation = "lighter";
-    for (i = 0; i < 5; i++) {
-      x = w * (0.12 + i * 0.18) + Math.sin(now * 0.11 + i * 1.7) * w * 0.05;
+    for (i = 0; i < nRay; i++) {
+      x = w * (0.18 + i * (saver ? 0.36 : 0.18)) + Math.sin(now * 0.11 + i * 1.7) * w * 0.05;
       var ray = ctx.createLinearGradient(x, 0, x - w * 0.08, h);
-      ray.addColorStop(0, "rgba(90,230,255,0.10)");
+      ray.addColorStop(0, saver ? "rgba(90,230,255,0.07)" : "rgba(90,230,255,0.10)");
       ray.addColorStop(0.55, "rgba(40,180,160,0.03)");
       ray.addColorStop(1, "rgba(0,0,0,0)");
       ctx.fillStyle = ray;
@@ -1026,11 +1051,11 @@ INDEX_HTML = r"""<!DOCTYPE html>
     ctx.clip();
     ctx.strokeStyle = "rgba(0,255,200,0.07)";
     ctx.lineWidth = Math.max(1, dpr * 0.7);
-    for (i = 1; i <= 16; i++) {
-      y = horizon + Math.pow(i / 16, 1.55) * (h - horizon);
+    for (i = 1; i <= nGrid; i++) {
+      y = horizon + Math.pow(i / nGrid, 1.55) * (h - horizon);
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
     }
-    for (i = -16; i <= 16; i++) {
+    for (i = -nGrid; i <= nGrid; i++) {
       ctx.beginPath();
       ctx.moveTo(vpX + i * w * 0.065, horizon);
       ctx.lineTo(vpX + i * w * 0.5, h);
@@ -1043,12 +1068,14 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
     ctx.strokeStyle = "rgba(80,255,220,0.08)";
     ctx.lineWidth = Math.max(1, dpr);
-    for (i = 0; i < 7; i++) {
+    var nWave = saver ? 4 : 7;
+    var waveStep = saver ? 22 : 12;
+    for (i = 0; i < nWave; i++) {
       ctx.beginPath();
       var amp = 8 * dpr + i * 2.2;
-      var y0 = h * (0.10 + i * 0.10);
+      var y0 = h * (0.10 + i * (saver ? 0.16 : 0.10));
       ctx.moveTo(0, y0);
-      for (x = 0; x <= w; x += 12) {
+      for (x = 0; x <= w; x += waveStep) {
         ctx.lineTo(x, y0 + Math.sin(x * 0.0065 + now * (0.32 + i * 0.07) + i) * amp
           + Math.sin(x * 0.018 - now * 0.26) * amp * 0.35);
       }
@@ -1056,7 +1083,8 @@ INDEX_HTML = r"""<!DOCTYPE html>
     }
 
     ctx.fillStyle = "rgba(180,255,230,0.16)";
-    for (i = 0; i < 55; i++) {
+    var nSpark = saver ? 28 : 55;
+    for (i = 0; i < nSpark; i++) {
       var u = (i * 0.618034 + now * 0.016) % 1;
       var v = (i * 0.371 + 0.07) % 1;
       ctx.fillRect(
@@ -1068,7 +1096,8 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
     ctx.strokeStyle = "rgba(160,255,255,0.12)";
     ctx.lineWidth = Math.max(1, dpr * 0.8);
-    for (i = 0; i < 16; i++) {
+    var nBub = saver ? 8 : 16;
+    for (i = 0; i < nBub; i++) {
       var bu = (i * 0.173 + now * (0.04 + (i % 5) * 0.008)) % 1;
       x = ((i * 97) % 1000) / 1000 * w;
       y = h - bu * h * 1.15;
@@ -1078,10 +1107,13 @@ INDEX_HTML = r"""<!DOCTYPE html>
       ctx.stroke();
     }
 
-    var vig = ctx.createRadialGradient(w * 0.5, h * 0.42, h * 0.12, w * 0.5, h * 0.5, h * 0.78);
-    vig.addColorStop(0, "rgba(0,0,0,0)");
-    vig.addColorStop(1, "rgba(0,0,0,0.42)");
-    ctx.fillStyle = vig;
+    if (vigW !== w || vigH !== h || !vigGrad) {
+      vigW = w; vigH = h;
+      vigGrad = ctx.createRadialGradient(w * 0.5, h * 0.42, h * 0.12, w * 0.5, h * 0.5, h * 0.78);
+      vigGrad.addColorStop(0, "rgba(0,0,0,0)");
+      vigGrad.addColorStop(1, "rgba(0,0,0,0.42)");
+    }
+    ctx.fillStyle = vigGrad;
     ctx.fillRect(0, 0, w, h);
   }
 
@@ -1106,10 +1138,12 @@ INDEX_HTML = r"""<!DOCTYPE html>
     legendGeom = layoutLegend(w, h, dpr);
     L = legendGeom;
     if (playing) legendScan = (legendScan + dt * 0.42) % Math.max(1, oceanInst.length);
-    ensureLegendOff(L.boxW, L.boxH);
+    oceanFrame++;
+    var redrawLegend = (oceanFrame % 3) === 0;
+    ensureLegendOff(L.boxW, L.boxH, redrawLegend);
     hi = legendHighlight();
 
-    FILL_STEP = oceanInst.length > 12 ? 3 : 2;
+    FILL_STEP = ((SAVER || WALLPAPER) ? 4 : (oceanInst.length > 12 ? 3 : 2)) + fillBoost;
     ctx.fillStyle = "rgba(255,255,255,0.30)";
     s = Math.max(1.3, Math.min(w, h) / 560);
 
@@ -1204,7 +1238,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
         ay = py - (dx * sa + dy * ca) * sc;
         ctx.fillRect(ax, ay, s, s);
       }
-      if (legendOffCtx) {
+      if (legendOffCtx && redrawLegend) {
         lx = 22 * dpr;
         ly = L.head + (k + 0.5) * L.rowH;
         msc = (L.rowH * 0.82) / (v.x1 - v.x0);
@@ -1216,7 +1250,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
         legendOffCtx.fillStyle = (k === hi)
           ? "rgba(255,255,255,0.92)"
           : "rgba(170,255,230,0.55)";
-        for (i = 0; i < n; i += 2) {
+        for (i = 0; i < n; i += 4) {
           X = outX[i]; Y = outY[i];
           if (X < v.x0 || X > v.x1 || Y < v.y0 || Y > v.y1) continue;
           dx = X - cx; dy = Y - cy;
@@ -1265,26 +1299,48 @@ INDEX_HTML = r"""<!DOCTYPE html>
     drawLegendHud(w, h, dpr, mx, my);
   }
 
+  function maxDpr() {
+    var raw = window.devicePixelRatio || 1;
+    if (SAVER || WALLPAPER) return Math.min(raw, 1);
+    return Math.min(raw, 1.5);
+  }
+  function schedule() {
+    if (SAVER || WALLPAPER) {
+      var wait = Math.max(0, frameMin - (performance.now() - lastTs));
+      setTimeout(function () { requestAnimationFrame(draw); }, wait);
+    } else {
+      requestAnimationFrame(draw);
+    }
+  }
   function draw(ts) {
     if (!lastTs) lastTs = ts;
-    var dt = Math.min(0.05, (ts - lastTs) / 1000);
+    var gap = ts - lastTs;
+    if (gap < frameMin * 0.72) {
+      schedule();
+      return;
+    }
+    var dt = Math.min(0.05, gap / 1000);
     lastTs = ts;
+    if (dt > 0.04) fillBoost = Math.min(3, fillBoost + 1);
+    else if (dt < 0.024 && fillBoost > 0) fillBoost -= 1;
 
-    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var dpr = maxDpr();
     var wCss = window.innerWidth;
     var hCss = window.innerHeight;
     if (cv.width !== (wCss * dpr | 0) || cv.height !== (hCss * dpr | 0)) {
       cv.width = wCss * dpr | 0; cv.height = hCss * dpr | 0;
+      bgGrad = null; vigGrad = null;
     }
     var w = cv.width, h = cv.height;
     ctx.setTransform(1,0,0,1,0,0);
 
     if (idx < 0) {
       drawOcean(w, h, dpr, dt);
-      requestAnimationFrame(draw);
+      schedule();
       return;
     }
 
+    FILL_STEP = 1 + (fillBoost > 1 ? 1 : 0);
     var C = CREATURES[idx];
     if (playing) t += C.dt * dt * 60;
     count = C.fill(t);
@@ -1309,8 +1365,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
       var ay = oy + (v.y1 - Y) * scale;
       ctx.fillRect(ax, ay, s, s);
     }
+    FILL_STEP = 1;
 
-    requestAnimationFrame(draw);
+    schedule();
   }
   if (SHOT) {
     document.body.classList.add("ocean");
