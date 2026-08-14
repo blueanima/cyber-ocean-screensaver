@@ -2,6 +2,7 @@ mod formulas;
 mod gait;
 mod gpu;
 mod hud;
+mod life;
 mod ocean;
 mod settings;
 
@@ -272,7 +273,12 @@ impl ApplicationHandler for App {
                         &self.scratches,
                         self.ocean_t,
                         dt,
-                        self.pointer,
+                        if self.cfg.wallpaper || self.cfg.windowed || self.last_mouse.is_some()
+                        {
+                            Some(self.pointer)
+                        } else {
+                            None
+                        },
                         size,
                         !self.cfg.windowed,
                     );
