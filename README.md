@@ -53,7 +53,7 @@ GitHub Actions 会在打 `v*` 标签或手动 Run workflow 后生成：
 
 ```bash
 chmod +x scripts/build-release.sh packaging/AppRun
-VERSION=1.0.1 ./scripts/build-release.sh
+./scripts/build-release.sh                 # 已发布过的版本会自动升补丁号
 ./dist/CyberOcean-*-x86_64.AppImage          # 屏保
 ./dist/CyberOcean-*-x86_64.AppImage --gallery
 ./dist/CyberOcean-*-x86_64.AppImage --wallpaper

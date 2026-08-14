@@ -55,10 +55,10 @@ impl LifeParams {
         Self {
             body: self.body.clamp(0.07, 0.17),
             near: self.near.clamp(0.90, 1.70),
-            far: self.far.clamp(1.90, 4.20),
+            far: self.far.clamp(1.35, 3.60),
             push: self.push.clamp(0.50, 3.80),
             far_w: self.far_w.clamp(0.12, 1.40),
-            gyre: self.gyre.clamp(0.0, 0.16),
+            gyre: self.gyre.clamp(0.0, 0.10),
             slide: self.slide.clamp(0.06, 0.28),
             kinds,
         }
@@ -113,25 +113,24 @@ pub fn kind_life(kind: GaitKind, life: &LifeParams) -> KindLife {
     life.kinds[kind_ix(kind)]
 }
 
-/// 100 代 (1+4) ES 烘出的群体参数（2026-08-14，fitness 15.94 → 16.17）。
-/// 水母早感慢让；蠕虫/虾主动侧滑；海天使快转；辐射花贴身漂开。
+/// 第二轮 100 代 ES（擦身适应度 13.04 → 13.59）。对头迫近才让，擦肩通过。
 pub const LIFE: LifeParams = LifeParams {
-    body: 0.112,
-    near: 1.522,
-    far: 3.529,
-    push: 2.940,
-    far_w: 0.542,
-    gyre: 0.045,
-    slide: 0.124,
+    body: 0.086,
+    near: 1.121,
+    far: 1.927,
+    push: 2.090,
+    far_w: 0.204,
+    gyre: 0.017,
+    slide: 0.113,
     kinds: [
-        KindLife { space: 1.211, yaw: 0.193, brake: 0.164, slip: 0.273, wander: 0.047, shy: 1.017 }, // jet
-        KindLife { space: 1.169, yaw: 0.288, brake: 0.074, slip: 0.395, wander: 0.044, shy: 0.725 }, // ciliary
-        KindLife { space: 0.984, yaw: 0.614, brake: 0.087, slip: 0.439, wander: 0.078, shy: 0.894 }, // metachronal
-        KindLife { space: 1.443, yaw: 0.448, brake: 0.116, slip: 0.602, wander: 0.102, shy: 0.484 }, // undulate
-        KindLife { space: 1.171, yaw: 0.720, brake: 0.260, slip: 0.161, wander: 0.065, shy: 0.844 }, // flap
-        KindLife { space: 0.880, yaw: 0.158, brake: 0.083, slip: 0.974, wander: 0.016, shy: 0.997 }, // spin
-        KindLife { space: 1.280, yaw: 0.280, brake: 0.406, slip: 0.782, wander: 0.031, shy: 1.001 }, // hover
-        KindLife { space: 1.024, yaw: 0.362, brake: 0.084, slip: 0.298, wander: 0.080, shy: 0.617 }, // helix
+        KindLife { space: 0.948, yaw: 0.252, brake: 0.144, slip: 0.514, wander: 0.046, shy: 0.434 }, // jet
+        KindLife { space: 0.934, yaw: 0.267, brake: 0.055, slip: 0.947, wander: 0.027, shy: 0.694 }, // ciliary
+        KindLife { space: 1.250, yaw: 0.413, brake: 0.120, slip: 0.459, wander: 0.103, shy: 0.300 }, // metachronal
+        KindLife { space: 1.707, yaw: 0.720, brake: 0.067, slip: 0.262, wander: 0.134, shy: 0.333 }, // undulate
+        KindLife { space: 1.557, yaw: 0.551, brake: 0.104, slip: 0.316, wander: 0.065, shy: 0.387 }, // flap
+        KindLife { space: 0.929, yaw: 0.126, brake: 0.041, slip: 1.000, wander: 0.019, shy: 0.860 }, // spin
+        KindLife { space: 1.055, yaw: 0.142, brake: 0.502, slip: 0.720, wander: 0.027, shy: 0.578 }, // hover
+        KindLife { space: 1.351, yaw: 0.409, brake: 0.099, slip: 0.193, wander: 0.078, shy: 0.300 }, // helix
     ],
 };
 
@@ -153,31 +152,40 @@ pub struct SchoolStats {
     pub align: f64,
     pub yaw_flips: f64,
     pub cell_entropy: f64,
+    #[allow(dead_code)]
     pub corner_frac: f64,
     pub mean_speed: f64,
     pub closest: f64,
+    pub graze_frac: f64,
+    pub gyre_align: f64,
+    pub cruise_ratio: f64,
+    pub evade_frac: f64,
 }
 
 #[cfg(test)]
 pub fn score(s: &SchoolStats) -> f64 {
-    let spread = (s.mean_nn / 0.13).tanh();
-    let floor = (s.min_nn / 0.055).tanh();
-    let close = (s.closest / 0.045).tanh();
-    let overlap = (-s.overlap_frac * 10.0).exp();
+    let nn_t = 1.0 - ((s.mean_nn - 0.155).abs() / 0.09).clamp(0.0, 1.0);
+    let pile = (s.min_nn / 0.042).tanh();
+    let shy = if s.closest > 0.13 {
+        ((s.closest - 0.13) / 0.10).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let crush = if s.closest < 0.030 { 1.0 } else { 0.0 };
+    let graze = (s.graze_frac / 0.035).clamp(0.0, 1.0);
+    let overlap = (-s.overlap_frac * 12.0).exp();
     let align = s.align.clamp(0.0, 1.0);
-    let flips = (-s.yaw_flips / 3.5).exp();
+    let flips = (-s.yaw_flips / 3.0).exp();
     let cover = (s.cell_entropy / (16.0f64.ln())).clamp(0.0, 1.0);
-    let corner = (1.0 - s.corner_frac).clamp(0.0, 1.0);
-    let alive = ((s.mean_speed - 0.002) / 0.012).clamp(0.0, 1.0);
-    2.2 * spread
-        + 2.6 * floor
-        + 2.0 * close
-        + 2.3 * overlap
-        + 1.1 * align
-        + 0.9 * flips
-        + 1.6 * cover
-        + 0.8 * corner
-        + 0.6 * alive
+    let carousel = 1.0 - ((s.gyre_align - 0.32).abs() / 0.50).clamp(0.0, 1.0);
+    let alive = s.cruise_ratio.clamp(0.0, 1.15).min(1.0);
+    let evade = (1.0 - (s.evade_frac - 0.12).max(0.0) * 1.4).clamp(0.0, 1.0);
+    2.4 * nn_t + 2.0 * pile - 1.8 * shy - 2.2 * crush + 1.9 * graze + 2.0 * overlap + 1.0 * align
+        + 0.8 * flips
+        + 1.3 * cover
+        + 0.9 * carousel
+        + 1.3 * alive
+        + 0.7 * evade
 }
 
 #[cfg(test)]

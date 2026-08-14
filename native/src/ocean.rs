@@ -427,7 +427,9 @@ pub fn integrate_with(
         let gl = ((c.x - 0.5).hypot(c.y - 0.5)).max(0.08);
         let gnx = (c.y - 0.5) / gl;
         let gny = (0.5 - c.x) / gl;
-        bdes += (fwd_x * gny - fwd_y * gnx) * life.gyre;
+        let nnd_hint = nd.get(i).copied().unwrap_or(f64::MAX);
+        let g_w = if nnd_hint < 0.16 { 0.22 } else { 1.0 };
+        bdes += (fwd_x * gny - fwd_y * gnx) * life.gyre * g_w;
 
         if pointer_on {
             let px = side_g + c.x * inner_w + cam_x;
@@ -487,14 +489,34 @@ pub fn integrate_with(
         }
 
         let my_r = c.scale * life.body * kl.space;
-        let sense = (my_r * (3.4 + 3.6 * kl.shy)).clamp(0.11, 0.36);
+        let sense = match g.kind {
+            crate::gait::GaitKind::Jet | crate::gait::GaitKind::Hover => {
+                (my_r * 2.20).clamp(0.055, 0.11)
+            }
+            crate::gait::GaitKind::SpinDrift => (my_r * 2.30).clamp(0.060, 0.12),
+            _ => (my_r * (2.35 + 1.05 * kl.shy)).clamp(0.070, 0.16),
+        };
         let nnd = nd[i];
-        if nnd < sense {
+        let mut on_course = false;
+        if nnd < 0.24 {
             let nx = nnx[i];
             let ny = nny[i];
-            let closing = -(fwd_x * nx + fwd_y * ny);
-            let prox = (1.0 - nnd / sense).clamp(0.0, 1.0);
-            if closing > 0.08 {
+            let to_x = -nx;
+            let to_y = -ny;
+            let closing = fwd_x * to_x + fwd_y * to_y;
+            let miss = (fwd_x * to_y - fwd_y * to_x).abs();
+            let impact = miss * nnd;
+            let hit_r = my_r * (0.68 + 0.42 * kl.space);
+            let loom = closing > 0.42 && impact < hit_r * 1.2;
+            let range = if loom {
+                (sense * 1.9).clamp(0.10, 0.22)
+            } else {
+                sense
+            };
+            let prox = (1.0 - nnd / range.max(1e-6)).clamp(0.0, 1.0);
+            on_course = nnd < range && closing > 0.20 && impact < hit_r;
+            if on_course || (loom && nnd < range) {
+                on_course = true;
                 if c.evade_t <= 0.0 || c.evade_dir.abs() < 0.5 {
                     let cross = fwd_x * ny - fwd_y * nx;
                     c.evade_dir = if cross.abs() > 0.06 {
@@ -505,13 +527,22 @@ pub fn integrate_with(
                         -1.0
                     };
                 }
-                c.evade_t = (0.40 + 0.55 * prox * closing).max(c.evade_t);
-                let need = closing.clamp(0.0, 1.0) * (0.38 + 0.62 * prox);
-                let yaw = kl.yaw * need * (0.90 + 0.30 * kl.shy);
+                let urgency = (1.0 - (impact / hit_r.max(1e-6)).clamp(0.0, 1.0))
+                    * closing.clamp(0.0, 1.0)
+                    * (0.45 + 0.55 * prox);
+                c.evade_t = (0.22 + 0.40 * urgency).max(c.evade_t);
+                let yaw = kl.yaw * urgency.max(0.18);
                 c.rot += c.evade_dir * yaw * dt;
                 fwd_x = c.rot.cos();
                 fwd_y = -c.rot.sin();
-                c.speed *= (1.0 - kl.brake * prox * closing.max(0.0) * 0.65).max(0.50);
+                c.speed *= (1.0 - kl.brake * urgency * 0.35).max(0.62);
+            } else if closing > 0.14 && nnd < sense * 0.80 && c.evade_dir.abs() < 0.5 {
+                let cross = fwd_x * ny - fwd_y * nx;
+                c.evade_dir = if cross.abs() > 0.04 {
+                    cross.signum()
+                } else {
+                    1.0
+                };
             }
         }
         c.evade_t = (c.evade_t - dt).max(0.0);
@@ -533,14 +564,17 @@ pub fn integrate_with(
             let nx = nnx[i];
             let ny = nny[i];
             let prox = (1.0 - nnd / sense).clamp(0.0, 1.0);
-            let into = (-c.vx * nx - c.vy * ny).max(0.0);
-            c.vx += nx * into * (0.35 + 0.45 * prox);
-            c.vy += ny * into * (0.35 + 0.45 * prox);
-            if c.evade_dir.abs() > 0.5 {
+            if on_course || nnd < my_r * 1.7 {
+                let into = (-c.vx * nx - c.vy * ny).max(0.0);
+                let k = if on_course { 0.40 + 0.40 * prox } else { 0.22 };
+                c.vx += nx * into * k;
+                c.vy += ny * into * k;
+            }
+            if c.evade_dir.abs() > 0.5 && (on_course || nnd < sense * 0.75) {
                 let sx = -ny * c.evade_dir;
                 let sy = nx * c.evade_dir;
-                c.vx += sx * c.speed * kl.slip * prox;
-                c.vy += sy * c.speed * kl.slip * prox;
+                c.vx += sx * c.speed * kl.slip * prox * 0.85;
+                c.vy += sy * c.speed * kl.slip * prox * 0.85;
             }
         }
         c.x += c.vx * dt + c.fx * dt * life.slide;
@@ -741,6 +775,10 @@ pub fn simulate_school(seed: u32, count: usize, seconds: f64, life: &LifeParams)
     let mut cells = [0u32; 16];
     let mut corner = 0.0;
     let mut speed_acc = 0.0;
+    let mut graze_n = 0.0;
+    let mut gyre_acc = 0.0;
+    let mut cruise_acc = 0.0;
+    let mut evade_n = 0.0;
     for step in 0..nsteps {
         advance_morph(&mut inst, dt);
         integrate_with(
@@ -779,6 +817,9 @@ pub fn simulate_school(seed: u32, count: usize, seconds: f64, life: &LifeParams)
                     if d < contact {
                         overlap_n += 1.0;
                     }
+                    if d >= 0.055 && d <= 0.125 {
+                        graze_n += 1.0;
+                    }
                 }
             }
             frame_min = frame_min.min(nn);
@@ -801,6 +842,15 @@ pub fn simulate_school(seed: u32, count: usize, seconds: f64, life: &LifeParams)
             prev_yaw[i] = yaw;
             prev_rot[i] = inst[i].rot;
             speed_acc += inst[i].speed;
+            let cruise = crate::gait::gait(inst[i].ci).cruise.max(1e-6);
+            cruise_acc += inst[i].speed / cruise;
+            if inst[i].evade_t > 0.0 {
+                evade_n += 1.0;
+            }
+            let gl = ((inst[i].x - 0.5).hypot(inst[i].y - 0.5)).max(0.08);
+            let gnx = (inst[i].y - 0.5) / gl;
+            let gny = (0.5 - inst[i].x) / gl;
+            gyre_acc += (fx * gnx + fy * gny).clamp(-1.0, 1.0);
             let gx = ((inst[i].x - 0.08) / 0.84 * 4.0).floor().clamp(0.0, 3.0) as usize;
             let gy = ((inst[i].y - 0.10) / 0.80 * 4.0).floor().clamp(0.0, 3.0) as usize;
             cells[gy * 4 + gx] += 1;
@@ -854,6 +904,26 @@ pub fn simulate_school(seed: u32, count: usize, seconds: f64, life: &LifeParams)
             0.0
         },
         closest: if closest.is_finite() { closest } else { 0.0 },
+        graze_frac: if pair_frames > 0.0 {
+            graze_n / pair_frames
+        } else {
+            0.0
+        },
+        gyre_align: if samples > 0.0 {
+            gyre_acc / (samples * nf)
+        } else {
+            0.0
+        },
+        cruise_ratio: if samples > 0.0 {
+            cruise_acc / (samples * nf)
+        } else {
+            0.0
+        },
+        evade_frac: if samples > 0.0 {
+            evade_n / (samples * nf)
+        } else {
+            0.0
+        },
     }
 }
 
@@ -939,23 +1009,29 @@ mod tests {
     fn school_stays_spread() {
         let s = simulate_school(7, 17, 10.0, &LIFE);
         println!(
-            "school mean_nn={:.3} min={:.3} closest={:.3} overlap={:.3} align={:.2} flips={:.2} H={:.2} corner={:.2} v={:.4} score={:.2}",
+            "school mean_nn={:.3} min={:.3} closest={:.3} graze={:.3} overlap={:.3} align={:.2} flips={:.2} H={:.2} gyre={:.2} cruise={:.2} evade={:.2} v={:.4} score={:.2}",
             s.mean_nn,
             s.min_nn,
             s.closest,
+            s.graze_frac,
             s.overlap_frac,
             s.align,
             s.yaw_flips,
             s.cell_entropy,
-            s.corner_frac,
+            s.gyre_align,
+            s.cruise_ratio,
+            s.evade_frac,
             s.mean_speed,
             score(&s)
         );
-        assert!(s.mean_nn > 0.12, "mean nn too small {}", s.mean_nn);
+        assert!(s.mean_nn > 0.11, "mean nn too small {}", s.mean_nn);
+        assert!(s.mean_nn < 0.24, "too shy mean {}", s.mean_nn);
         assert!(s.min_nn > 0.035, "piled together min {}", s.min_nn);
-        assert!(s.overlap_frac < 0.12, "overlap {}", s.overlap_frac);
-        assert!(s.align > 0.72, "align {}", s.align);
+        assert!(s.closest < 0.16, "never graze closest {}", s.closest);
+        assert!(s.overlap_frac < 0.14, "overlap {}", s.overlap_frac);
+        assert!(s.align > 0.70, "align {}", s.align);
         assert!(s.cell_entropy > 1.6, "coverage {}", s.cell_entropy);
+        assert!(s.cruise_ratio > 0.45, "school stalled {}", s.cruise_ratio);
     }
 
     #[test]
@@ -963,8 +1039,9 @@ mod tests {
         let (closest, final_d, turned) = simulate_headon(&LIFE);
         println!("headon closest={closest:.3} final={final_d:.3} turned={turned:.2}");
         assert!(closest > 0.045, "they passed through each other {closest}");
-        assert!(final_d > 0.08, "still stuck together {final_d}");
-        assert!(turned > 0.20, "did not turn away {turned}");
+        assert!(closest < 0.20, "too shy to approach {closest}");
+        assert!(final_d > 0.07, "still stuck together {final_d}");
+        assert!(turned > 0.22, "did not turn away {turned}");
         assert!(turned < 4.2, "spun out {turned}");
     }
 
@@ -974,10 +1051,10 @@ mod tests {
             acc += score(&simulate_school(seed, 17, 8.0, p));
         }
         let (closest, final_d, turned) = simulate_headon(p);
-        let head = (closest / 0.05).tanh()
-            + (final_d / 0.10).tanh()
-            + ((turned - 0.15) / 0.8).clamp(0.0, 1.0)
-            - ((turned - 3.2).max(0.0) * 0.4);
+        let head = (closest / 0.07).tanh() * (1.0 - ((closest - 0.09).abs() / 0.12).clamp(0.0, 1.0))
+            + (final_d / 0.10).tanh() * 0.4
+            + ((turned - 0.20) / 0.7).clamp(0.0, 1.0)
+            - ((turned - 2.8).max(0.0) * 0.45);
         acc * 0.5 + head
     }
 

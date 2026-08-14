@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 打出成品：AppImage、便携 zip、离线 HTML。
 # 环境变量：
-#   VERSION=1.0.1          成品文件名版本
+#   VERSION=1.0.2          成品文件名版本（不设则读 VERSION 文件；已打过标签则自动升补丁号）
 #   SYSTEM_PYTHON=1        不捆绑 CPython，AppImage 使用系统 python3
 #   GITHUB_MIRROR=https://ghfast.top/  强制镜像前缀
 set -euo pipefail
@@ -9,9 +9,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIST="$ROOT/dist"
 CACHE="$ROOT/.cache/build"
-VERSION="${VERSION:-$(git -C "$ROOT" describe --tags --always 2>/dev/null | sed 's/-dirty$//' || true)}"
-if [[ -z "${VERSION}" || "${VERSION}" =~ ^[0-9a-f]{7,}$ ]]; then
-  VERSION="1.0.1"
+chmod +x "$ROOT/scripts/bump-version.sh"
+if [[ -z "${VERSION:-}" ]]; then
+  VERSION="$("$ROOT/scripts/bump-version.sh")"
+else
+  VERSION="${VERSION#v}"
 fi
 ARCH="$(uname -m)"
 case "$ARCH" in
