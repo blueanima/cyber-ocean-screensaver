@@ -1,8 +1,8 @@
 # 赛博海洋馆屏幕保护 / Cyber Ocean Screensaver
 
-公式生物在深海里游动：白点勾勒的浮蚕、水母、栉水母……互相躲开，也会被指针轻轻推开。
+赛博海洋馆是一款跨平台**屏幕保护程序**和**动态壁纸**：公式生成的浮蚕、水母、栉水母、磷虾、海天使在深蓝海里游动，白点勾勒，互相躲开。支持 Linux AppImage、Windows `.scr`、macOS。
 
-Parametric sea-life drawn as translucent scatter points. They steer clear of one another and drift away from the pointer. Runs on **macOS / Linux / Windows** with Python 3.10+ and Chrome, Edge, or Firefox.
+**Cyber Ocean Screensaver** is a cross-platform **screensaver** and **live wallpaper**. Parametric sea-life — jellyfish, comb jellies, krill, worms, sea angels — swim as white particles on deep navy water. Linux, Windows, and macOS. Python gallery plus a native Rust / wgpu engine.
 
 ## 截图 / Screenshots
 
@@ -172,7 +172,7 @@ python3 main.py --write-screensaver wallpaper.html --wallpaper
 
 `http://127.0.0.1:8765/screensaver?wallpaper=1&seed=42&shot=1`
 
-重新截图 Regenerate shots：`./scripts/capture-screenshots.sh`
+重新截图 Regenerate shots（含 GitHub 社交预览 `social.png`）：`./scripts/capture-screenshots.sh`
 
 ## 依赖 / Dependencies
 

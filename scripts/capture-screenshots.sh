@@ -29,4 +29,9 @@ timeout 30 "$FF" --headless --profile "$PROFILE" --window-size 1600,900 \
   --screenshot "$OUT/gallery.png" \
   "http://127.0.0.1:$PORT/?seed=42&shot=1" || true
 
+# GitHub About 社交预览推荐 1280×640
+timeout 30 "$FF" --headless --profile "$PROFILE" --window-size 1280,640 \
+  --screenshot "$OUT/social.png" \
+  "http://127.0.0.1:$PORT/screensaver?wallpaper=1&seed=42&shot=1" || true
+
 ls -la "$OUT"
