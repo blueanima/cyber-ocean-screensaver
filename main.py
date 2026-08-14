@@ -5,6 +5,7 @@
   python3 main.py
   python3 main.py --screensaver
   python3 main.py --wallpaper
+  python3 main.py --config
   python3 main.py --export beidou_fucan.svg
 """
 
@@ -17,6 +18,7 @@ from pathlib import Path
 from fucan.gallery import INDEX_HTML
 from fucan.kiosk import show_config_dialog
 from fucan.server import run_server
+from fucan.settings import native_argv_from_ns
 from fucan.svg_render import rows_to_svg
 
 
@@ -48,6 +50,9 @@ def main(argv: list[str] | None = None) -> None:
     if scr == "preview":
         return
     if scr == "run":
+        from fucan.kiosk import launch_native_gpu
+
+        launch_native_gpu(["--screensaver"])
         run_server(
             host="127.0.0.1",
             port=8765,
@@ -64,6 +69,23 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--screensaver", action="store_true", help="全屏屏保：键鼠退出")
     parser.add_argument("--wallpaper", action="store_true", help="全屏壁纸模式：不因键鼠退出")
+    parser.add_argument("--config", action="store_true", help="打开画质 / 密度设置")
+    parser.add_argument("--no-setup", action="store_true", help="跳过启动前的设置窗口（空闲屏保用）")
+    parser.add_argument(
+        "--quality",
+        choices=("low", "medium", "high", "ultra"),
+        help="画质预设：low / medium / high / ultra",
+    )
+    parser.add_argument("--step", type=int, help="粒子密度，1 最密，越大越疏")
+    parser.add_argument("--fps", type=float, help="帧率上限")
+    parser.add_argument("--count", type=int, help="生物数量 1–17")
+    parser.add_argument("--no-legend", dest="legend", action="store_false", default=None, help="关闭左上图例")
+    parser.add_argument("--no-formula", dest="formula", action="store_false", default=None, help="关闭生物公式")
+    parser.add_argument("--legend-stride", type=int, help="图例抽样，1 为全点")
+    parser.add_argument("--point-size", type=float, help="点大小倍率，默认 1.0")
+    parser.add_argument("--no-vsync", dest="vsync", action="store_false", default=None, help="关闭垂直同步")
+    parser.add_argument("--seed", type=int, help="随机种子")
+    parser.add_argument("--lang", choices=("zh", "en"), help="界面语言：zh 中文 / en English")
     parser.add_argument("--export", type=Path, help="导出 SVG 后退出")
     parser.add_argument("--t", type=float, default=1.2, help="导出时的时间参数 t")
     parser.add_argument(
@@ -77,6 +99,12 @@ def main(argv: list[str] | None = None) -> None:
         help="写出屏保用 HTML（可供 Lively 等加载）",
     )
     args = parser.parse_args(argv[1:])
+
+    if args.config:
+        show_config_dialog()
+        return
+
+    native_flags = native_argv_from_ns(args)
 
     if args.write_html:
         args.write_html.write_text(INDEX_HTML, encoding="utf-8")
@@ -100,12 +128,17 @@ def main(argv: list[str] | None = None) -> None:
     path = "/"
     allow_quit = False
     kiosk = False
-    if args.screensaver:
-        path = "/screensaver"
-        allow_quit = True
-        kiosk = True
-    elif args.wallpaper:
-        path = "/screensaver?wallpaper=1"
+    if args.screensaver or args.wallpaper:
+        if not args.no_setup:
+            status = show_config_dialog(startable=True)
+            if status != "start":
+                return
+        from fucan.kiosk import launch_native_gpu
+
+        mode = "--wallpaper" if args.wallpaper else "--screensaver"
+        launch_native_gpu([mode, *native_flags])
+        path = "/screensaver?wallpaper=1" if args.wallpaper else "/screensaver"
+        allow_quit = not args.wallpaper
         kiosk = True
 
     run_server(

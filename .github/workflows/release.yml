@@ -17,8 +17,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
       - name: Tools
-        run: sudo apt-get update && sudo apt-get install -y zip curl
+        run: sudo apt-get update && sudo apt-get install -y zip curl build-essential pkg-config libxkbcommon-dev libwayland-dev libvulkan-dev
       - name: Build
         run: |
           chmod +x scripts/build-release.sh packaging/AppRun

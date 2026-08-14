@@ -2,14 +2,31 @@
 set -euo pipefail
 HERE="$(dirname "$(readlink -f "$0")")"
 ROOT="$(readlink -f "$HERE/usr/share/cyber-ocean")"
+NATIVE="$HERE/usr/bin/cyber-ocean-native"
 PY="$HERE/usr/python/bin/python3"
 if [[ ! -x "$PY" ]]; then
   PY="$(command -v python3)"
 fi
 export PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}"
+export APPDIR="${APPDIR:-$HERE}"
 cd "$ROOT"
+
+run_native() {
+  if [[ -x "$NATIVE" ]]; then
+    exec "$NATIVE" "$@"
+  fi
+}
+
 if [[ $# -eq 0 ]]; then
-  exec "$PY" "$ROOT/main.py" --screensaver
+  run_native --screensaver
+  exec "$PY" "$ROOT/main.py" --screensaver --no-setup
+fi
+if [[ "$1" == "--setup" || "$1" == "-setup" ]]; then
+  shift
+  exec "$PY" "$ROOT/main.py" --screensaver "$@"
+fi
+if [[ "$1" == "--screensaver" || "$1" == "--wallpaper" ]]; then
+  run_native "$@"
 fi
 if [[ "$1" == "--gallery" ]]; then
   shift

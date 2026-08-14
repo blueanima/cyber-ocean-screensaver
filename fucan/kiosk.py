@@ -153,6 +153,49 @@ def _python_candidates() -> list[str]:
     return out
 
 
+def native_gpu_bin() -> Path | None:
+    env = os.environ.get("CYBER_OCEAN_NATIVE")
+    if env:
+        p = Path(env)
+        if p.is_file() and os.access(p, os.X_OK):
+            return p
+    names = ("cyber-ocean-native", "cyber-ocean-native.exe")
+    roots: list[Path] = []
+    appdir = os.environ.get("APPDIR")
+    if appdir:
+        roots.append(Path(appdir) / "usr" / "bin")
+    if getattr(sys, "frozen", False):
+        roots.append(Path(sys.executable).resolve().parent)
+    here = Path(__file__).resolve().parent.parent
+    roots.extend(
+        [
+            here / "native" / "target" / "release",
+            here / "native" / "target" / "debug",
+            here,
+            Path(sys.argv[0]).resolve().parent,
+        ]
+    )
+    which = shutil.which("cyber-ocean-native")
+    if which:
+        return Path(which)
+    for root in roots:
+        for name in names:
+            p = root / name
+            if p.is_file() and os.access(p, os.X_OK):
+                return p
+    return None
+
+
+def launch_native_gpu(argv: list[str]) -> bool:
+    """用 wgpu 原生窗口替换当前进程。找不到二进制则返回 False。"""
+    path = native_gpu_bin()
+    if path is None:
+        return False
+    print(f"原生 wgpu 屏保：{path}")
+    os.execv(str(path), [str(path), *argv])
+    return False
+
+
 def launch_native_view(url: str) -> bool:
     """系统全屏窗口（无地址栏、无标签）。成功则记录进程并返回 True。"""
     global _browser_proc
@@ -175,7 +218,6 @@ def launch_native_view(url: str) -> bool:
             _browser_proc = proc
             print("全屏屏保窗口已打开（铺满屏幕）")
             return True
-        # 立刻退出：这个 Python 加载不了 GTK/WebKit，试下一个
     return False
 
 
@@ -255,19 +297,7 @@ def stop_kiosk() -> None:
                 pass
 
 
-def show_config_dialog() -> None:
-    """Windows 屏保“设置”对话框。"""
-    try:
-        import tkinter as tk
-        from tkinter import messagebox
+def show_config_dialog(**kwargs):
+    from fucan.settings import show_config_dialog as _dialog
 
-        root = tk.Tk()
-        root.withdraw()
-        root.attributes("-topmost", True)
-        messagebox.showinfo(
-            "赛博海洋馆",
-            "无需额外设置。\n\n作为屏幕保护运行时，移动鼠标或按任意键即可退出。",
-        )
-        root.destroy()
-    except Exception:
-        print("赛博海洋馆：无需设置。移动鼠标或按任意键退出。")
+    return _dialog(**kwargs)

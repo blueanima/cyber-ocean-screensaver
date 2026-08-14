@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 打出成品：AppImage、便携 zip、离线 HTML。
 # 环境变量：
-#   VERSION=1.0.0          成品文件名版本
+#   VERSION=1.0.1          成品文件名版本
 #   SYSTEM_PYTHON=1        不捆绑 CPython，AppImage 使用系统 python3
 #   GITHUB_MIRROR=https://ghfast.top/  强制镜像前缀
 set -euo pipefail
@@ -11,7 +11,7 @@ DIST="$ROOT/dist"
 CACHE="$ROOT/.cache/build"
 VERSION="${VERSION:-$(git -C "$ROOT" describe --tags --always 2>/dev/null | sed 's/-dirty$//' || true)}"
 if [[ -z "${VERSION}" || "${VERSION}" =~ ^[0-9a-f]{7,}$ ]]; then
-  VERSION="1.0.0"
+  VERSION="1.0.1"
 fi
 ARCH="$(uname -m)"
 case "$ARCH" in
@@ -89,11 +89,38 @@ PORT="$DIST/CyberOcean-portable"
 mkdir -p "$PORT/fucan"
 cp -a "$ROOT/main.py" "$ROOT/LICENSE" "$ROOT/README.md" "$ROOT/requirements.txt" "$PORT/"
 cp -a "$ROOT/fucan/"*.py "$PORT/fucan/"
+CJK_FONT=""
+for cand in \
+  "$ROOT/fonts/DroidSansFallbackFull.ttf" \
+  /usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf \
+  /usr/share/fonts/truetype/droid/DroidSansFallback.ttf
+do
+  if [[ -f "$cand" ]]; then
+    CJK_FONT="$cand"
+    break
+  fi
+done
+if [[ -n "$CJK_FONT" ]]; then
+  mkdir -p "$PORT/fonts"
+  cp -a "$CJK_FONT" "$PORT/fonts/DroidSansFallbackFull.ttf"
+fi
 python3 "$ROOT/main.py" --write-screensaver "$PORT/screensaver.html"
 python3 "$ROOT/main.py" --write-screensaver "$PORT/wallpaper.html" --wallpaper
+NATIVE_BIN="$ROOT/native/target/release/cyber-ocean-native"
+if command -v cargo >/dev/null 2>&1; then
+  echo "==> rust wgpu screensaver"
+  export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/native/target}"
+  ( cd "$ROOT/native" && CARGO_NET_OFFLINE=1 cargo build --release )
+fi
+if [[ -x "$NATIVE_BIN" ]]; then
+  cp -a "$NATIVE_BIN" "$PORT/cyber-ocean-native"
+fi
 cat > "$PORT/run-screensaver.sh" <<'EOF'
 #!/usr/bin/env bash
 cd "$(dirname "$0")"
+if [[ -x ./cyber-ocean-native ]]; then
+  exec ./cyber-ocean-native --screensaver "$@"
+fi
 exec python3 main.py --screensaver "$@"
 EOF
 cat > "$PORT/run-gallery.sh" <<'EOF'
@@ -124,6 +151,7 @@ Windows:
   run-gallery.bat
 
 需要本机已安装 Python 3.10+，以及 Chrome / Edge / Firefox（全屏）。
+若目录里有 cyber-ocean-native，屏保会走 wgpu 原生窗口，不需要浏览器。
 需要纯网页时，用浏览器打开 screensaver.html 或 wallpaper.html。
 EOF
 ( cd "$DIST" && zip -qr "CyberOcean-portable-${VERSION}.zip" CyberOcean-portable )
@@ -175,6 +203,10 @@ fi
 
 cp -a "$ROOT/main.py" "$ROOT/LICENSE" "$APPDIR/usr/share/cyber-ocean/"
 cp -a "$ROOT/fucan/"*.py "$APPDIR/usr/share/cyber-ocean/fucan/"
+if [[ -n "${CJK_FONT:-}" ]]; then
+  mkdir -p "$APPDIR/usr/share/cyber-ocean/fonts"
+  cp -a "$CJK_FONT" "$APPDIR/usr/share/cyber-ocean/fonts/DroidSansFallbackFull.ttf"
+fi
 install -m 0755 "$ROOT/packaging/AppRun" "$APPDIR/AppRun"
 install -m 0644 "$ROOT/packaging/cyber-ocean.desktop" "$APPDIR/cyber-ocean.desktop"
 install -m 0644 "$ROOT/packaging/cyber-ocean.desktop" "$APPDIR/usr/share/applications/cyber-ocean.desktop"
@@ -187,6 +219,9 @@ HERE="$(dirname "$(readlink -f "$0")")/../.."
 exec "$HERE/AppRun" "$@"
 EOF
 chmod +x "$APPDIR/usr/bin/cyber-ocean"
+if [[ -x "$NATIVE_BIN" ]]; then
+  install -m 0755 "$NATIVE_BIN" "$APPDIR/usr/bin/cyber-ocean-native"
+fi
 
 echo "==> appimagetool"
 TOOL="$CACHE/$TOOL_NAME"

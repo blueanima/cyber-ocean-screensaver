@@ -53,7 +53,7 @@ GitHub Actions 会在打 `v*` 标签或手动 Run workflow 后生成：
 
 ```bash
 chmod +x scripts/build-release.sh packaging/AppRun
-VERSION=1.0.0 ./scripts/build-release.sh
+VERSION=1.0.1 ./scripts/build-release.sh
 ./dist/CyberOcean-*-x86_64.AppImage          # 屏保
 ./dist/CyberOcean-*-x86_64.AppImage --gallery
 ./dist/CyberOcean-*-x86_64.AppImage --wallpaper
@@ -61,8 +61,34 @@ VERSION=1.0.0 ./scripts/build-release.sh
 
 GitHub 直连失败时，脚本会走 `gh` API 或 `ghfast.top` 镜像。只要系统已有 Python 3.10+，也可以 `SYSTEM_PYTHON=1 ./scripts/build-release.sh`。
 
-AppImage 默认进入全屏屏保（铺满屏幕的系统窗口）。集合馆用 `--gallery`。  
-The AppImage opens a native fullscreen screensaver. Use `--gallery` for the browser gallery.
+AppImage 默认进入 **wgpu 原生全屏屏保**（公式在 CPU 里算，点粒在 GPU 上画）。集合馆用 `--gallery`。  
+The AppImage default is a native wgpu fullscreen saver. Use `--gallery` for the browser gallery.
+
+本地编译原生屏保：
+
+```bash
+cd native
+cargo build --release
+../native/target/release/cyber-ocean-native          # 全屏
+../native/target/release/cyber-ocean-native --windowed
+python3 main.py --screensaver                         # 启动前弹出设置，点「开始」
+python3 main.py --screensaver --no-setup              # 空闲屏保：直接全屏
+python3 main.py --config                              # 只改设置，不启动
+python3 main.py --screensaver --quality medium        # 本次覆盖
+```
+
+运行中在海洋画面上**点右键**会再次弹出设置；点「应用」立即生效。Esc 先关设置窗，再按退出屏保。
+
+画质预设（也可写进 `~/.config/cyber-ocean/settings.json`）：
+
+| 预设 | 密度 step | 帧率 | 生物数 | 图例 |
+| --- | --- | --- | --- | --- |
+| `low` | 4（疏） | 24 | 12 | 1/4 点 |
+| `medium` | 2 | 30 | 17 | 1/2 点 |
+| `high`（默认） | 1（密） | 30 | 17 | 全点 |
+| `ultra` | 1 | 60 | 17 | 全点 |
+
+可单独调：`--step` `--fps` `--count` `--point-size` `--legend-stride` `--no-legend` `--no-vsync`。原生二进制 `--help` / `--print-config` 会列出当前生效值。
 
 
 ## 图例怎么读 / How to read the legend

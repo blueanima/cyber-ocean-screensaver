@@ -1,0 +1,18 @@
+[package]
+name = "cyber-ocean"
+version = "1.0.1"
+edition = "2021"
+description = "Native wgpu screensaver for Cyber Ocean"
+license = "MIT"
+publish = false
+
+[[bin]]
+name = "cyber-ocean-native"
+path = "src/main.rs"
+
+[dependencies]
+bytemuck = { version = "1.21", features = ["derive"] }
+fontdue = "0.9"
+pollster = "0.4"
+wgpu = "24.0.1"
+winit = { version = "0.30", default-features = true }

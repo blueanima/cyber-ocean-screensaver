@@ -40,8 +40,8 @@ echo
 echo "运行： cyber-ocean-screensaver"
 echo "集合馆： cyber-ocean"
 echo
-echo "空闲自动启动示例（任选其一）："
-echo "  hypridle / swayidle timeout 180 '$BIN/cyber-ocean-screensaver'"
+echo "空闲自动启动请加 --no-setup，避免弹出设置窗口："
+echo "  hypridle / swayidle timeout 180 '$BIN/cyber-ocean-screensaver --no-setup'"
 echo "  xfce4-session：设置 → 会话和启动 → 应用程序自动启动"
 echo
 
