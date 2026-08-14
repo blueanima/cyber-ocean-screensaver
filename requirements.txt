@@ -1,0 +1,5 @@
+# 本软件仅使用 Python 标准库，无需 pip 安装。
+# 需要 Python 3.10+，以及 Chrome / Edge / Chromium / Firefox（全屏屏保）。
+# 运行：
+#   python3 main.py --screensaver
+#   python3 main.py
