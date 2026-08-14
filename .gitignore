@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .DS_Store
 *.png
+!docs/screenshots/*.png
 dist/
 build/
 *.spec

@@ -28,6 +28,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
     body.saver .formula,
     body.saver .strip { display: none !important; }
     body.saver, body.saver canvas { cursor: none; }
+    body.ocean:not(.saver) canvas.legend-hit { cursor: pointer; }
     .topbar {
       position: fixed; top: 0; left: 0; right: 0; z-index: 3;
       display: flex; align-items: center; justify-content: space-between; gap: 1rem;
@@ -67,6 +68,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
     body.ocean .info { display: none; }
     .info h2 { font-size: 1.08rem; font-weight: 600; color: #fff; line-height: 1.35; }
     .info .blurb { margin-top: 0.38rem; font-size: 0.8rem; color: #c5e8c5; line-height: 1.5; }
+    .info .blurb.en { margin-top: 0.2rem; font-size: 0.74rem; color: #8fb8b0; }
     .formula {
       position: fixed; right: 1rem; bottom: 6.4rem; z-index: 3; pointer-events: none;
       max-width: min(440px, 44vw);
@@ -123,21 +125,22 @@ INDEX_HTML = r"""<!DOCTYPE html>
     <div class="brand">
       <span class="mark"></span>
       <div>
-        <h1 id="title">数字生命</h1>
-        <p id="sub">集合馆</p>
+        <h1 id="title">数字生命 · Digital Life</h1>
+        <p id="sub">集合馆 · Gallery</p>
       </div>
     </div>
     <div class="tools">
-      <button type="button" id="btnOcean">赛博海洋</button>
-      <button type="button" id="btnShuffle" style="display:none">重新随机</button>
-      <button type="button" id="btnPause">暂停</button>
-      <a class="btn" id="btnLesson" href="/lesson">分步讲解</a>
+      <button type="button" id="btnOcean">赛博海洋 · Ocean</button>
+      <button type="button" id="btnShuffle" style="display:none">重新随机 · Shuffle</button>
+      <button type="button" id="btnPause">暂停 · Pause</button>
+      <a class="btn" id="btnLesson" href="/lesson">分步讲解 · Lesson</a>
     </div>
   </header>
   <aside class="info">
     <div class="kicker" id="kicker"></div>
     <h2 id="name"></h2>
     <p class="blurb" id="blurb"></p>
+    <p class="blurb en" id="blurbEn"></p>
   </aside>
   <aside class="formula" id="formula" hidden></aside>
   <nav class="strip" id="strip"></nav>
@@ -153,8 +156,11 @@ INDEX_HTML = r"""<!DOCTYPE html>
   );
   if (SAVER || WALLPAPER) {
     document.body.classList.add("saver", "ocean");
-    document.title = SAVER ? "赛博海洋馆 · 屏幕保护" : "赛博海洋馆";
+    document.title = SAVER ? "赛博海洋馆 · Cyber Ocean Screensaver" : "赛博海洋馆 · Cyber Ocean";
   }
+  var SHOT = /(?:[?&]shot=1\b)/.test(location.search);
+  var seedMatch = location.search.match(/[?&]seed=(\d+)/);
+  var FIXED_SEED = seedMatch ? (parseInt(seedMatch[1], 10) >>> 0) : null;
   var MAX = 42000;
   var FILL_STEP = 1;
   var outX = new Float32Array(MAX);
@@ -462,8 +468,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
   }
 
   var CREATURES = [
-    { id:"fucan", name:"北斗浮蚕", tag:"环节浮游虫",
+    { id:"fucan", name:"北斗浮蚕", nameEn:"Beidou Fucan", tag:"环节浮游虫", tagEn:"pelagic annelid",
       blurb:"海报同款公式。透明小桨手，环节上会发黄光。",
+      blurbEn:"The poster formula: a translucent paddler with a hint of yellow along its segments.",
       formulas: [
         "k = x/4 − 12.5 ,   e = y/9 + 6 ,   o = √(k²+e²)/9",
         "c = o/2 + e/2 − t/4",
@@ -472,8 +479,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
       ],
       fill: fillFucan, dt: Math.PI/90, view: {x0:0,x1:400,y0:0,y1:400}, bg:"#050505",
       ink:"rgba(255,255,255,", inkA:0.50 },
-    { id:"youyan", name:"蚰蜒", tag:"多足虫 · life 1",
+    { id:"youyan", name:"蚰蜒", nameEn:"House Centipede", tag:"多足虫 · life 1", tagEn:"myriapod · life 1",
       blurb:"最经典的赛博节肢：tan(1/k) 画出关节，像百足在游。",
+      blurbEn:"Classic cyber arthropod: tan(1/k) joints, swimming like a house centipede.",
       formulas: [
         "k = x/4 − 12.5 ,   e = y/9 + 5 ,   o = √(k²+e²)/9",
         "q = x+99 + tan(1/k) + o k (cos(9e)/4 + cos(y/2)) sin(4o−t)",
@@ -481,8 +489,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
         "⟨ 0.7 q sin c + 9 cos(y/19+t)+200 ,  200 + q/2 cos c ⟩"
       ],
       fill: fillYouyan, dt: Math.PI/90, view: {x0:0,x1:400,y0:0,y1:400}, bg:"#050505" },
-    { id:"jichong", name:"脊虫", tag:"赛博脊虫 · life 2",
+    { id:"jichong", name:"脊虫", nameEn:"Spine Worm", tag:"赛博脊虫 · life 2", tagEn:"cyber spine · life 2",
       blurb:"长条脊柱左右摆动，像深海里的一条脊梁。",
+      blurbEn:"A long spine swaying side to side, like a backbone in the deep.",
       formulas: [
         "e = y/8 − 13",
         "k = (4 + 3 sin(2y−t)) cos(x/29) ,   d = √(k²+e²)",
@@ -490,8 +499,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
         "⟨ q + 30 cos(d−t)+200 ,  620 − q sin(d−t) − 39d ⟩"
       ],
       fill: fillJichong, dt: Math.PI/240, view: {x0:0,x1:400,y0:0,y1:400}, bg:"#050505" },
-    { id:"jelly", name:"小水母", tag:"伞状 · life 3",
+    { id:"jelly", name:"小水母", nameEn:"Jellyfish", tag:"伞状 · life 3", tagEn:"medusa · life 3",
       blurb:"Matlab 博客里讲过的那只。触须随 π/20 轻轻摇。",
+      blurbEn:"The Matlab-blog jelly. Tentacles sway on a π/20 beat.",
       formulas: [
         "k = 5 cos(x/14) cos(y/30) ,   e = y/8 − 13",
         "d = (k²+e²)/59 + 4 ,   a = atan2(k,e)",
@@ -500,8 +510,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
         "⟨ q sin c + 200 ,  (q+9d) cos c + 200 ⟩"
       ],
       fill: fillJelly, dt: Math.PI/20, view: {x0:0,x1:400,y0:0,y1:400}, bg:"#050505" },
-    { id:"nebula", name:"星云水母", tag:"大伞盖 · life 4",
+    { id:"nebula", name:"星云水母", nameEn:"Nebula Jelly", tag:"大伞盖 · life 4", tagEn:"bell · life 4",
       blurb:"(k²+e²)/169 撑开伞盖，光斑像深海热泉。",
+      blurbEn:"(k²+e²)/169 opens the bell; specks like a hydrothermal vent.",
       formulas: [
         "k = x/8 − 12.5 ,   e = y/8 − 12.5",
         "o = (k²+e²)/169 ,   d = ½ + 5 cos(o)",
@@ -509,8 +520,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
         "Y = y/4 − 135 o + 6d cos(3d+9o+t) + 275"
       ],
       fill: fillNebula, dt: Math.PI/120, view: {x0:0,x1:400,y0:0,y1:400}, bg:"#050505" },
-    { id:"lantern", name:"花水母", tag:"灯笼 · life 5",
+    { id:"lantern", name:"花水母", nameEn:"Lantern Jelly", tag:"灯笼 · life 5", tagEn:"lantern · life 5",
       blurb:"atan2 绕七圈，伞缘开成一朵花。",
+      blurbEn:"atan2 winds seven times; the bell rim opens like a flower.",
       formulas: [
         "k = 9 cos(x/8) ,   e = y/8 − 12.5",
         "d = (k²+e²)/99 + sin(t)/6 + ½",
@@ -519,8 +531,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
         "⟨ q sin c + 200 ,  (q+19d) cos c + 200 ⟩"
       ],
       fill: fillLantern, dt: Math.PI/120, view: {x0:0,x1:400,y0:0,y1:400}, bg:"#050505" },
-    { id:"feather", name:"羽鳃", tag:"life 6",
+    { id:"feather", name:"羽鳃", nameEn:"Feather Gill", tag:"life 6", tagEn:"life 6",
       blurb:"前半段用位运算扭出分节，后半段收成一条羽。",
+      blurbEn:"Bitwise kinks in the first half, then it folds into a feather.",
       formulas: [
         "y = i/790 ,   k = y<5 ? 6+6 sin(⌊y⌋⊕1) : 4+cos y",
         "d = √( (k cos(i+t/4))² + (y/3−13)² )",
@@ -529,8 +542,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
         "⟨ q+90 cos c+200 ,  400−(q sin c+29d−170) ⟩"
       ],
       fill: fillFeather, dt: Math.PI/90, view: {x0:0,x1:400,y0:0,y1:400}, bg:"#050505" },
-    { id:"tentacle", name:"触须虫", tag:"life 7",
+    { id:"tentacle", name:"触须虫", nameEn:"Tentacle Worm", tag:"life 7", tagEn:"life 7",
       blurb:"触手从一点伸出去再卷回来，像在探路。",
+      blurbEn:"Arms reach out and coil back, as if feeling the way.",
       formulas: [
         "y = i/345 ,   x = y<11 ? 6+6 sin(⌊y⌋⊕8) : y/5+cos(y/2)",
         "e = y/7 − 13 ,   k = x cos(i−t/4)",
@@ -539,8 +553,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
         "⟨ q+60 cos c+200 ,  400−(q sin c+29d−170) ⟩"
       ],
       fill: fillTentacle, dt: Math.PI/120, view: {x0:0,x1:400,y0:0,y1:400}, bg:"#050505" },
-    { id:"flower6", name:"六瓣花", tag:"辐射对称 · life 8",
+    { id:"flower6", name:"六瓣花", nameEn:"Six-petal", tag:"辐射对称 · life 8", tagEn:"radial · life 8",
       blurb:"同一组点转 6 次，开成海星或雪花。",
+      blurbEn:"The same points rotated six times: a starfish or a snowflake.",
       formulas: [
         "k = (i mod 25)−12 ,   e = i/800",
         "d = 7 cos( √(k²+e²)/3 + t/2 )",
@@ -549,8 +564,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
         "旋转 π/3 × 6 ，再平移 +200"
       ],
       fill: fillFlower6, dt: Math.PI/240, view: {x0:0,x1:400,y0:0,y1:400}, bg:"#050505" },
-    { id:"wheel", name:"轮虫花", tag:"辐射对称 · life 9",
+    { id:"wheel", name:"轮虫花", nameEn:"Rotifer Wheel", tag:"辐射对称 · life 9", tagEn:"radial · life 9",
       blurb:"转 14 瓣，像轮虫的纤毛圈。",
+      blurbEn:"Fourteen petals, like a rotifer’s corona of cilia.",
       formulas: [
         "k = (i mod 50)−25 ,   e = i/1100",
         "d = 5 cos( √(k²+e²) − t + (i mod 2) )",
@@ -559,8 +575,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
         "旋转 π/7 × 14 ，再平移 +200"
       ],
       fill: fillWheel, dt: Math.PI/240, view: {x0:0,x1:400,y0:0,y1:400}, bg:"#050505" },
-    { id:"spiral", name:"螺灯", tag:"原创 · 螺旋",
+    { id:"spiral", name:"螺灯", nameEn:"Spiral Lamp", tag:"原创 · 螺旋", tagEn:"original · spiral",
       blurb:"对数螺线裹一层呼吸膜，像深海里的一盏螺灯。",
+      blurbEn:"A log spiral wrapped in a breathing film: a lamp in the dark.",
       formulas: [
         "k = x/5 − 12 ,   e = y/8 − 8 ,   o = √(k²+e²)/8",
         "c = 1.15 o + t/5",
@@ -568,8 +585,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
         "⟨ q cos c + 10 sin(2e+t)+200 ,  0.88 q sin c + 200 ⟩"
       ],
       fill: fillSpiral, dt: Math.PI/90, view: {x0:0,x1:400,y0:0,y1:400}, bg:"#050505" },
-    { id:"comb", name:"栉水母", tag:"原创 · 梳板",
+    { id:"comb", name:"栉水母", nameEn:"Comb Jelly", tag:"原创 · 梳板", tagEn:"original · ctenophore",
       blurb:"八列梳板用 atan2 划开，身体扁长，会轻轻侧摆。",
+      blurbEn:"Eight comb rows from atan2; a flat body with a slow roll.",
       formulas: [
         "k = 7 cos(x/10) cos(y/35) ,   e = y/8 − 12",
         "d = (k²+e²)/70 + 3 ,   a = atan2(k,e)",
@@ -577,8 +595,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
         "c = d/2.4 + e/85 − t/14"
       ],
       fill: fillComb, dt: Math.PI/80, view: {x0:0,x1:400,y0:0,y1:400}, bg:"#050505" },
-    { id:"saweel", name:"锯鳗", tag:"原创 · 长体",
+    { id:"saweel", name:"锯鳗", nameEn:"Saw Eel", tag:"原创 · 长体", tagEn:"original · elongate",
       blurb:"比脊虫更密的锯齿，像一条带电的深海鳗。",
+      blurbEn:"Denser serrations than the spine worm: an electric deep-sea eel.",
       formulas: [
         "e = y/9 − 12",
         "k = (3.5 + 2.4 sin(1.6y−t)) cos(x/22) ,   d = √(k²+e²)",
@@ -586,8 +605,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
         "⟨ q + 24 cos(0.7d−t)+200 ,  560 − q sin(0.7d−t) − 32d ⟩"
       ],
       fill: fillSawEel, dt: Math.PI/180, view: {x0:0,x1:400,y0:0,y1:400}, bg:"#050505" },
-    { id:"star8", name:"八腕星", tag:"原创 · 辐射",
+    { id:"star8", name:"八腕星", nameEn:"Octo Star", tag:"原创 · 辐射", tagEn:"original · radial",
       blurb:"同一组点转 8 次，开成八条腕的海星。",
+      blurbEn:"The same points rotated eight times into an eight-armed star.",
       formulas: [
         "k = (i mod 20)−10 ,   e = i/900",
         "d = 6 cos( √(k²+e²)/4 + t/3 )",
@@ -595,8 +615,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
         "y₀ = 2.5e − 8d cos(d+e/8+t) ，旋转 π/4 × 8"
       ],
       fill: fillStar8, dt: Math.PI/200, view: {x0:0,x1:400,y0:0,y1:400}, bg:"#050505" },
-    { id:"shrimp", name:"磷虾", tag:"原创 · 节肢",
+    { id:"shrimp", name:"磷虾", nameEn:"Krill", tag:"原创 · 节肢", tagEn:"original · arthropod",
       blurb:"短体节肢，尾巴一甩一甩，像发光的磷虾。",
+      blurbEn:"A short arthropod flicking its tail, like glowing krill.",
       formulas: [
         "k = x/4 − 12.5 ,   e = y/8 + 3.5 ,   o = √(k²+e²)/8",
         "q = 55 + 10 sin(0.8k) + k(2.2 + 0.55 o sin(0.7y−t))",
@@ -604,8 +625,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
         "⟨ 0.5 q sin c + 7 cos(y/16+t)+200 ,  200 + 0.38 q cos c ⟩"
       ],
       fill: fillShrimp, dt: Math.PI/70, view: {x0:0,x1:400,y0:0,y1:400}, bg:"#050505" },
-    { id:"vortex", name:"涡虫", tag:"原创 · 旋涡",
+    { id:"vortex", name:"涡虫", nameEn:"Vortex Worm", tag:"原创 · 旋涡", tagEn:"original · vortex",
       blurb:"极坐标半径随三倍角起伏，整只虫子在原地打旋。",
+      blurbEn:"Polar radius rises on a triple angle; the body spins in place.",
       formulas: [
         "x = (i mod 200)−100 ,   y = i/200 − 35",
         "r = √(x²+y²)/38 ,   θ = atan2(y,x)",
@@ -613,8 +635,9 @@ INDEX_HTML = r"""<!DOCTYPE html>
         "⟨ R cos(θ+0.45r+t/7)+200 ,  0.9 R sin(θ+0.45r+t/7)+200 ⟩"
       ],
       fill: fillVortex, dt: Math.PI/100, view: {x0:0,x1:400,y0:0,y1:400}, bg:"#050505" },
-    { id:"angel", name:"海天使", tag:"原创 · 翼足",
+    { id:"angel", name:"海天使", nameEn:"Sea Angel", tag:"原创 · 翼足", tagEn:"original · pteropod",
       blurb:"一对小翼拍水，身体像透明的海蝴蝶。",
+      blurbEn:"A pair of tiny wings beating water: a transparent sea butterfly.",
       formulas: [
         "k = 6.5 cos(x/12) cos(y/38) ,   e = y/9 − 11",
         "d = (k²+e²)/68 + 2.4 ,   a = atan2(k,e)",
@@ -627,6 +650,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
   var idx = -1, t = 0, playing = true, lastTs = 0;
   var oceanInst = [], oceanSeed = 1, oceanT = 0, oceanFocus = -1, oceanHover = -1;
   var pointerX = 0.5, pointerY = 0.5, pointerDown = 0;
+  var legendGeom = null, legendOff = null, legendOffCtx = null, legendScan = 0;
   var cv = document.getElementById("cv");
   var ctx = cv.getContext("2d", { alpha: false });
 
@@ -705,11 +729,12 @@ INDEX_HTML = r"""<!DOCTYPE html>
     idx = i;
     t = 1.2;
     var C = CREATURES[idx];
-    document.getElementById("title").textContent = "数字生命";
-    document.getElementById("sub").textContent = "集合馆";
-    document.getElementById("kicker").textContent = C.tag;
-    document.getElementById("name").textContent = C.name;
+    document.getElementById("title").textContent = "数字生命 · Digital Life";
+    document.getElementById("sub").textContent = "集合馆 · Gallery";
+    document.getElementById("kicker").textContent = C.tag + " · " + C.tagEn;
+    document.getElementById("name").textContent = C.name + "  /  " + C.nameEn;
     document.getElementById("blurb").textContent = C.blurb;
+    document.getElementById("blurbEn").textContent = C.blurbEn || "";
     document.getElementById("btnLesson").style.display = C.id === "fucan" ? "inline-block" : "none";
     document.getElementById("btnShuffle").style.display = "none";
     document.body.classList.remove("ocean");
@@ -719,12 +744,13 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
   function selectOcean() {
     idx = -1;
-    if (!oceanInst.length) spawnOcean();
-    document.getElementById("title").textContent = "数字生命";
-    document.getElementById("sub").textContent = "赛博海洋";
-    document.getElementById("kicker").textContent = "随机群落";
-    document.getElementById("name").textContent = "种子 " + oceanSeed + " · " + oceanInst.length + " 只";
-    document.getElementById("blurb").textContent = "";
+    if (!oceanInst.length) spawnOcean(FIXED_SEED);
+    document.getElementById("title").textContent = "数字生命 · Digital Life";
+    document.getElementById("sub").textContent = "赛博海洋 · Cyber Ocean";
+    document.getElementById("kicker").textContent = "随机群落 · Swarm";
+    document.getElementById("name").textContent = "种子 " + oceanSeed + " · seed · " + oceanInst.length + " 只";
+    document.getElementById("blurb").textContent = "白点公式生物会互相躲开，也会被指针推开。";
+    document.getElementById("blurbEn").textContent = "Parametric creatures avoid each other and drift away from the pointer.";
     document.getElementById("btnLesson").style.display = "none";
     document.getElementById("btnShuffle").style.display = "inline-block";
     document.body.classList.add("ocean");
@@ -736,14 +762,14 @@ INDEX_HTML = r"""<!DOCTYPE html>
   var oceanCard = document.createElement("button");
   oceanCard.className = "card ocean on";
   oceanCard.type = "button";
-  oceanCard.innerHTML = "<strong>赛博海洋</strong><span>全部 · 随机</span>";
+  oceanCard.innerHTML = "<strong>赛博海洋</strong><span>Ocean · all</span>";
   oceanCard.onclick = function () { selectOcean(); };
   strip.appendChild(oceanCard);
   CREATURES.forEach(function (C, i) {
     var b = document.createElement("button");
     b.className = "card";
     b.type = "button";
-    b.innerHTML = "<strong>" + C.name + "</strong><span>" + C.tag + "</span>";
+    b.innerHTML = "<strong>" + C.name + "</strong><span>" + C.nameEn + "</span>";
     b.onclick = function () { select(i); };
     strip.appendChild(b);
   });
@@ -751,19 +777,23 @@ INDEX_HTML = r"""<!DOCTYPE html>
 
   document.getElementById("btnPause").onclick = function () {
     playing = !playing;
-    this.textContent = playing ? "暂停" : "继续游动";
+    this.textContent = playing ? "暂停 · Pause" : "继续 · Play";
   };
   document.getElementById("btnOcean").onclick = function () { selectOcean(); };
   document.getElementById("btnShuffle").onclick = function () {
     spawnOcean();
-    document.getElementById("kicker").textContent = "随机群落";
-    document.getElementById("name").textContent = "种子 " + oceanSeed + " · " + oceanInst.length + " 只";
-    document.getElementById("blurb").textContent = "";
+    document.getElementById("kicker").textContent = "随机群落 · Swarm";
+    document.getElementById("name").textContent = "种子 " + oceanSeed + " · seed · " + oceanInst.length + " 只";
+    document.getElementById("blurb").textContent = "白点公式生物会互相躲开，也会被指针推开。";
+    document.getElementById("blurbEn").textContent = "Parametric creatures avoid each other and drift away from the pointer.";
   };
 
   window.addEventListener("mousemove", function (e) {
     pointerX = e.clientX / Math.max(1, window.innerWidth);
     pointerY = e.clientY / Math.max(1, window.innerHeight);
+    if (!SAVER && idx < 0) {
+      cv.classList.toggle("legend-hit", pickLegend(e) >= 0);
+    }
   });
   window.addEventListener("mousedown", function () { pointerDown = 1; });
   window.addEventListener("mouseup", function () { pointerDown = 0; });
@@ -771,9 +801,10 @@ INDEX_HTML = r"""<!DOCTYPE html>
     if (SAVER) return;
     if (idx < 0 && (e.key === "r" || e.key === "R")) {
       spawnOcean();
-      document.getElementById("kicker").textContent = "随机群落";
-      document.getElementById("name").textContent = "种子 " + oceanSeed + " · " + oceanInst.length + " 只";
-      document.getElementById("blurb").textContent = "";
+      document.getElementById("kicker").textContent = "随机群落 · Swarm";
+      document.getElementById("name").textContent = "种子 " + oceanSeed + " · seed · " + oceanInst.length + " 只";
+      document.getElementById("blurb").textContent = "白点公式生物会互相躲开，也会被指针推开。";
+      document.getElementById("blurbEn").textContent = "Parametric creatures avoid each other and drift away from the pointer.";
     }
   });
   if (SAVER) {
@@ -798,6 +829,16 @@ INDEX_HTML = r"""<!DOCTYPE html>
   if (SAVER || WALLPAPER) {
     setInterval(function () { if (idx < 0) spawnOcean(); }, 180000);
   }
+  function pickLegend(e) {
+    if (idx >= 0 || !legendGeom || !oceanInst.length) return -1;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var x = e.clientX * dpr, y = e.clientY * dpr;
+    var L = legendGeom;
+    if (x < L.x0 || x > L.x0 + L.boxW || y < L.y0 || y > L.y0 + L.boxH) return -1;
+    var k = ((y - L.y0 - L.head) / L.rowH) | 0;
+    if (k < 0 || k >= oceanInst.length) return -1;
+    return k;
+  }
   function pickOcean(e, radiusMul) {
     if (idx >= 0 || !oceanInst.length) return -1;
     var dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -812,7 +853,8 @@ INDEX_HTML = r"""<!DOCTYPE html>
     return best;
   }
   cv.addEventListener("click", function (e) {
-    var best = pickOcean(e, 0.7);
+    var best = pickLegend(e);
+    if (best < 0) best = pickOcean(e, 0.7);
     if (best < 0) return;
     oceanFocus = best;
     oceanInst[best].pulse = 1;
@@ -831,6 +873,120 @@ INDEX_HTML = r"""<!DOCTYPE html>
       }
     }
   });
+
+  function layoutLegend(w, h, dpr) {
+    var n = Math.max(1, oceanInst.length);
+    var x0 = 14 * dpr;
+    var y0 = (SAVER || WALLPAPER) ? 16 * dpr : 58 * dpr;
+    var bot = (SAVER || WALLPAPER) ? 16 * dpr : 108 * dpr;
+    var maxH = Math.max(90 * dpr, h - y0 - bot);
+    var head = 34 * dpr;
+    var rowH = Math.min(24 * dpr, Math.max(13.5 * dpr, (maxH - head - 10 * dpr) / n));
+    var boxH = head + n * rowH + 10 * dpr;
+    var boxW = Math.min(280 * dpr, Math.max(196 * dpr, w * 0.26));
+    return { x0: x0, y0: y0, boxW: boxW, boxH: boxH, rowH: rowH, head: head, n: n };
+  }
+
+  function ensureLegendOff(bw, bh) {
+    if (!legendOff) legendOff = document.createElement("canvas");
+    if (legendOff.width !== (bw | 0) || legendOff.height !== (bh | 0)) {
+      legendOff.width = bw | 0;
+      legendOff.height = bh | 0;
+    }
+    legendOffCtx = legendOff.getContext("2d");
+    legendOffCtx.setTransform(1, 0, 0, 1, 0, 0);
+    legendOffCtx.clearRect(0, 0, legendOff.width, legendOff.height);
+  }
+
+  function legendHighlight() {
+    var n = oceanInst.length;
+    if (!n) return -1;
+    if (oceanFocus >= 0) return oceanFocus;
+    if (oceanHover >= 0) return oceanHover;
+    if (SAVER || WALLPAPER) return (legendScan | 0) % n;
+    return -1;
+  }
+
+  function drawLegendHud(w, h, dpr, mx, my) {
+    var L = legendGeom;
+    if (!L || !oceanInst.length) return;
+    var hi = legendHighlight();
+    var x0 = L.x0, y0 = L.y0, bw = L.boxW, bh = L.boxH;
+    var r = 14 * dpr;
+
+    ctx.save();
+    ctx.fillStyle = "rgba(3, 10, 14, 0.72)";
+    ctx.strokeStyle = "rgba(90, 255, 220, 0.28)";
+    ctx.lineWidth = Math.max(1, dpr);
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x0, y0, bw, bh, r);
+    else ctx.rect(x0, y0, bw, bh);
+    ctx.fill();
+    ctx.stroke();
+
+    var scanY = y0 + L.head + ((legendScan % Math.max(1, oceanInst.length)) * L.rowH);
+    var bar = ctx.createLinearGradient(x0, scanY - 8 * dpr, x0, scanY + L.rowH + 8 * dpr);
+    bar.addColorStop(0, "rgba(80,255,220,0)");
+    bar.addColorStop(0.5, "rgba(80,255,220,0.10)");
+    bar.addColorStop(1, "rgba(80,255,220,0)");
+    ctx.fillStyle = bar;
+    ctx.fillRect(x0 + 2 * dpr, scanY - 6 * dpr, bw - 4 * dpr, L.rowH + 12 * dpr);
+
+    ctx.fillStyle = "rgba(127,255,212,0.92)";
+    ctx.font = (11 * dpr) + "px 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText("图例  /  Legend", x0 + 14 * dpr, y0 + 16 * dpr);
+    ctx.fillStyle = "rgba(180,230,220,0.55)";
+    ctx.font = (9 * dpr) + "px 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif";
+    ctx.fillText("种子 seed " + oceanSeed + " · " + oceanInst.length, x0 + 14 * dpr, y0 + 28 * dpr);
+
+    if (legendOff) ctx.drawImage(legendOff, x0, y0);
+
+    var k, inst, C, ly, on, depth, labelX;
+    ctx.textBaseline = "middle";
+    for (k = 0; k < oceanInst.length; k++) {
+      inst = oceanInst[k];
+      C = CREATURES[inst.ci];
+      ly = y0 + L.head + (k + 0.5) * L.rowH;
+      on = k === hi;
+      depth = 0.45 + (1 - inst.y) * 0.55;
+      if (on) {
+        ctx.fillStyle = "rgba(80,255,230,0.12)";
+        ctx.fillRect(x0 + 6 * dpr, y0 + L.head + k * L.rowH, bw - 12 * dpr, L.rowH);
+      }
+      labelX = x0 + 42 * dpr;
+      ctx.fillStyle = on ? "rgba(255,255,255,0.95)" : "rgba(210,245,235," + (0.62 * depth) + ")";
+      ctx.font = (on ? "600 " : "500 ") + (11 * dpr) + "px 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif";
+      ctx.fillText(C.name, labelX, ly - 3.2 * dpr);
+      ctx.fillStyle = on ? "rgba(127,255,212,0.8)" : "rgba(140,190,180," + (0.45 * depth) + ")";
+      ctx.font = (8.5 * dpr) + "px 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif";
+      ctx.fillText(C.nameEn || C.tag, labelX, ly + 8.2 * dpr);
+    }
+
+    if (hi >= 0 && oceanInst[hi] && oceanInst[hi]._ax) {
+      inst = oceanInst[hi];
+      ly = y0 + L.head + (hi + 0.5) * L.rowH;
+      ctx.strokeStyle = "rgba(160,255,240," + (0.28 + 0.2 * (inst.pulse || 0)) + ")";
+      ctx.lineWidth = Math.max(1, dpr * 0.9);
+      ctx.setLineDash([5 * dpr, 5 * dpr]);
+      ctx.lineDashOffset = -oceanT * 28 * dpr;
+      ctx.beginPath();
+      ctx.moveTo(x0 + bw - 8 * dpr, ly);
+      ctx.bezierCurveTo(
+        x0 + bw + 48 * dpr, ly,
+        (x0 + bw + inst._ax) / 2, (ly + inst._ay) / 2,
+        inst._ax, inst._ay
+      );
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = "rgba(180,255,240,0.85)";
+      ctx.beginPath();
+      ctx.arc(x0 + bw - 8 * dpr, ly, 2.2 * dpr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
 
   function drawOceanBg(w, h, now, dpr) {
     var g = ctx.createLinearGradient(0, 0, 0, h);
@@ -945,6 +1101,13 @@ INDEX_HTML = r"""<!DOCTYPE html>
     var mx = pointerX * w, my = pointerY * h;
     var i, k, inst, C, v, n, cx, cy, ca, sa, sc, px, py, X, Y, dx, dy, ax, ay, s;
     var driftX, driftY, rdx, rdy, rd, rd2, force, breathe, sway, near, hover = -1, hoverD = 1e12;
+    var L, hi, lx, ly, msc, ms;
+
+    legendGeom = layoutLegend(w, h, dpr);
+    L = legendGeom;
+    if (playing) legendScan = (legendScan + dt * 0.42) % Math.max(1, oceanInst.length);
+    ensureLegendOff(L.boxW, L.boxH);
+    hi = legendHighlight();
 
     FILL_STEP = oceanInst.length > 12 ? 3 : 2;
     ctx.fillStyle = "rgba(255,255,255,0.30)";
@@ -1041,6 +1204,30 @@ INDEX_HTML = r"""<!DOCTYPE html>
         ay = py - (dx * sa + dy * ca) * sc;
         ctx.fillRect(ax, ay, s, s);
       }
+      if (legendOffCtx) {
+        lx = 22 * dpr;
+        ly = L.head + (k + 0.5) * L.rowH;
+        msc = (L.rowH * 0.82) / (v.x1 - v.x0);
+        ms = Math.max(0.8, dpr * 0.7);
+        legendOffCtx.save();
+        legendOffCtx.beginPath();
+        legendOffCtx.rect(4 * dpr, L.head + k * L.rowH, 36 * dpr, L.rowH);
+        legendOffCtx.clip();
+        legendOffCtx.fillStyle = (k === hi)
+          ? "rgba(255,255,255,0.92)"
+          : "rgba(170,255,230,0.55)";
+        for (i = 0; i < n; i += 2) {
+          X = outX[i]; Y = outY[i];
+          if (X < v.x0 || X > v.x1 || Y < v.y0 || Y > v.y1) continue;
+          dx = X - cx; dy = Y - cy;
+          legendOffCtx.fillRect(
+            lx + (dx * ca - dy * sa) * msc,
+            ly - (dx * sa + dy * ca) * msc,
+            ms, ms
+          );
+        }
+        legendOffCtx.restore();
+      }
       if (k === oceanFocus || k === oceanHover) ctx.fillStyle = "rgba(255,255,255,0.30)";
     }
     FILL_STEP = 1;
@@ -1050,6 +1237,10 @@ INDEX_HTML = r"""<!DOCTYPE html>
       oceanHover = hover;
     } else {
       oceanHover = -1;
+    }
+    if (L && mx >= L.x0 && mx <= L.x0 + L.boxW && my >= L.y0 + L.head && my <= L.y0 + L.boxH) {
+      k = ((my - L.y0 - L.head) / L.rowH) | 0;
+      if (k >= 0 && k < oceanInst.length) oceanHover = k;
     }
 
     if (!SAVER) {
@@ -1071,6 +1262,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
       ctx.arc(inst._ax, inst._ay, Math.max(34 * dpr, inst._r * 0.34), 0, Math.PI * 2);
       ctx.stroke();
     }
+    drawLegendHud(w, h, dpr, mx, my);
   }
 
   function draw(ts) {
@@ -1119,6 +1311,18 @@ INDEX_HTML = r"""<!DOCTYPE html>
     }
 
     requestAnimationFrame(draw);
+  }
+  if (SHOT) {
+    document.body.classList.add("ocean");
+    idx = -1;
+    if (!oceanInst.length) spawnOcean(FIXED_SEED == null ? 42 : FIXED_SEED);
+    var dpr0 = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = (window.innerWidth * dpr0) | 0;
+    cv.height = (window.innerHeight * dpr0) | 0;
+    playing = true;
+    var wi;
+    for (wi = 0; wi < 160; wi++) drawOcean(cv.width, cv.height, dpr0, 1 / 40);
+    return;
   }
   requestAnimationFrame(draw);
 })();
