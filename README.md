@@ -18,6 +18,12 @@ Screensaver and wallpaper: bilingual legend, live silhouettes, lock-on line to t
 
 Gallery HUD is bilingual. Click a legend row to pulse that creature.
 
+![头尾对照 / Head and tail](docs/screenshots/heads-tails.png)
+
+黄线是脊椎，红端是头，青端是尾。花、轮、星无头。游动按这条中线锁航向。
+
+Yellow line is the spine; red is head, cyan is tail. Flowers, wheels, and stars have no head. Swimming locks to this axis.
+
 ## 快速开始 / Quick start
 
 ```bash
