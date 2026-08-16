@@ -704,7 +704,7 @@ pub fn build_hud(
     let c = &inst[hi];
     let spec = &SPECIES[c.ci];
     if show_legend || show_formula {
-        let ring_r = c.radius.max(22.0);
+        let ring_r = c.radius.max(10.0);
         let ring = [0.92, 0.96, 1.0, 0.90];
         push_ring(out, c.ax, c.ay, ring_r, ring, 2.0);
         push_ring(out, c.ax, c.ay, ring_r + 8.0 * s, [0.55, 0.72, 1.0, 0.38], 1.2);
@@ -715,7 +715,7 @@ pub fn build_hud(
         return;
     }
 
-    let ring_r = c.radius.max(22.0);
+    let ring_r = c.radius.max(10.0);
     let callout_w = 300.0 * s;
     let prefer_right = c.ax + ring_r + 18.0 + callout_w < screen.0 - 12.0;
     let callout_left = if prefer_right {

@@ -10,7 +10,8 @@ pub struct KindLife {
     pub yaw: f64,
     /// 对头接近时减速
     pub brake: f64,
-    /// 侧滑让路
+    /// 侧滑让路（已改为转向让路，保留供演化搜索）
+    #[allow(dead_code)]
     pub slip: f64,
     /// 航向漫游幅度
     pub wander: f64,
@@ -27,6 +28,7 @@ pub struct LifeParams {
     pub push: f64,
     pub far_w: f64,
     pub gyre: f64,
+    #[allow(dead_code)]
     pub slide: f64,
     pub kinds: [KindLife; 8],
 }
@@ -113,24 +115,24 @@ pub fn kind_life(kind: GaitKind, life: &LifeParams) -> KindLife {
     life.kinds[kind_ix(kind)]
 }
 
-/// 第二轮 100 代 ES（擦身适应度 13.04 → 13.59）。对头迫近才让，擦肩通过。
+/// 压转圈：弱环流、低航向角速度；辐射对称种只转身体不拧航向。
 pub const LIFE: LifeParams = LifeParams {
-    body: 0.086,
-    near: 1.121,
-    far: 1.927,
-    push: 2.090,
-    far_w: 0.204,
-    gyre: 0.017,
-    slide: 0.113,
+    body: 0.084,
+    near: 1.20,
+    far: 1.80,
+    push: 2.10,
+    far_w: 0.16,
+    gyre: 0.012,
+    slide: 0.10,
     kinds: [
-        KindLife { space: 0.948, yaw: 0.252, brake: 0.144, slip: 0.514, wander: 0.046, shy: 0.434 }, // jet
-        KindLife { space: 0.934, yaw: 0.267, brake: 0.055, slip: 0.947, wander: 0.027, shy: 0.694 }, // ciliary
-        KindLife { space: 1.250, yaw: 0.413, brake: 0.120, slip: 0.459, wander: 0.103, shy: 0.300 }, // metachronal
-        KindLife { space: 1.707, yaw: 0.720, brake: 0.067, slip: 0.262, wander: 0.134, shy: 0.333 }, // undulate
-        KindLife { space: 1.557, yaw: 0.551, brake: 0.104, slip: 0.316, wander: 0.065, shy: 0.387 }, // flap
-        KindLife { space: 0.929, yaw: 0.126, brake: 0.041, slip: 1.000, wander: 0.019, shy: 0.860 }, // spin
-        KindLife { space: 1.055, yaw: 0.142, brake: 0.502, slip: 0.720, wander: 0.027, shy: 0.578 }, // hover
-        KindLife { space: 1.351, yaw: 0.409, brake: 0.099, slip: 0.193, wander: 0.078, shy: 0.300 }, // helix
+        KindLife { space: 1.20, yaw: 0.24, brake: 0.10, slip: 0.36, wander: 0.040, shy: 0.36 }, // jet
+        KindLife { space: 0.92, yaw: 0.26, brake: 0.05, slip: 0.42, wander: 0.028, shy: 0.42 }, // ciliary
+        KindLife { space: 1.10, yaw: 0.28, brake: 0.08, slip: 0.38, wander: 0.055, shy: 0.32 }, // metachronal
+        KindLife { space: 1.55, yaw: 0.36, brake: 0.05, slip: 0.26, wander: 0.062, shy: 0.32 }, // undulate
+        KindLife { space: 1.45, yaw: 0.30, brake: 0.09, slip: 0.24, wander: 0.050, shy: 0.38 }, // flap
+        KindLife { space: 0.96, yaw: 0.10, brake: 0.03, slip: 0.55, wander: 0.018, shy: 0.40 }, // spin
+        KindLife { space: 0.90, yaw: 0.14, brake: 0.36, slip: 0.48, wander: 0.028, shy: 0.46 }, // hover
+        KindLife { space: 1.40, yaw: 0.16, brake: 0.08, slip: 0.14, wander: 0.036, shy: 0.30 }, // helix
     ],
 };
 
@@ -196,12 +198,20 @@ pub struct GenLog {
 }
 
 #[cfg(test)]
-pub fn evolve<F>(gens: u32, seed: u32, mut eval: F) -> (LifeParams, Vec<GenLog>)
+pub fn evolve<F>(gens: u32, seed: u32, eval: F) -> (LifeParams, Vec<GenLog>)
 where
-    F: FnMut(&LifeParams) -> f64,
+    F: Fn(&LifeParams) -> f64 + Sync,
+{
+    evolve_from(LIFE, gens, seed, eval)
+}
+
+#[cfg(test)]
+pub fn evolve_from<F>(start: LifeParams, gens: u32, seed: u32, eval: F) -> (LifeParams, Vec<GenLog>)
+where
+    F: Fn(&LifeParams) -> f64 + Sync,
 {
     let mut rng = mulberry32(seed);
-    let mut parent = LIFE;
+    let mut parent = start;
     let mut parent_s = eval(&parent);
     let mut log = Vec::with_capacity(gens as usize);
     const LAMBDA: usize = 4;
@@ -213,7 +223,17 @@ where
         let mut acc = 0.0;
         for i in 0..LAMBDA {
             kids[i] = parent.mutate(&mut rng);
-            scores[i] = eval(&kids[i]);
+        }
+        std::thread::scope(|scope| {
+            let mut hs = Vec::with_capacity(LAMBDA);
+            for kid in &kids {
+                hs.push(scope.spawn(|| eval(kid)));
+            }
+            for (i, h) in hs.into_iter().enumerate() {
+                scores[i] = h.join().expect("eval");
+            }
+        });
+        for i in 0..LAMBDA {
             acc += scores[i];
             if scores[i] > best_s {
                 best_s = scores[i];

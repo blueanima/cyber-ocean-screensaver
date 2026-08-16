@@ -368,6 +368,23 @@ pub fn fill_angel(t: f64, step: usize, out: &mut Vec<[f32; 2]>) {
 
 pub type FillFn = fn(f64, usize, &mut Vec<[f32; 2]>);
 
+/// 头尾怎么从身体上读。加新种必须选一类，并出对照图确认。
+///
+/// 中线是身体脊椎（去掉附肢/翅膀后的对称轴），头尾只在中线两端，不在边上。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HeadingKind {
+    /// n 次旋转拷贝：无头
+    Radial,
+    /// 伞盖水母：k=0 是中线，头在伞盖（中线最下方），触手是尾
+    Bell,
+    /// 细长身体：沿身体参数走脊椎，头朝航向
+    Spine,
+    /// 附肢在 k≈0 炸开：去掉附肢后的身体曲线才是脊椎
+    SpineNoLegs,
+    /// 有翅膀：头在身体尖端，不在翅膀上
+    Torso,
+}
+
 pub struct Species {
     #[allow(dead_code)]
     pub id: &'static str,
@@ -375,25 +392,51 @@ pub struct Species {
     pub name_en: &'static str,
     pub formula: &'static [&'static str],
     pub dt: f64,
+    #[allow(dead_code)]
+    pub heading: HeadingKind,
     pub fill: FillFn,
 }
 
 pub const SPECIES: &[Species] = &[
-    Species { id: "fucan", name: "北斗浮蚕", name_en: "Beidou Fucan", formula: &["k=x/4-12.5  e=y/9+6  o=sqrt(k*k+e*e)/9", "c=o/2+e/2-t/4", "q=(3/k)(0.5*tan(y/2)+cos y)+k(5/o+o*sin y*sin(e+4o-t))"], dt: std::f64::consts::PI / 90.0, fill: fill_fucan },
-    Species { id: "youyan", name: "蚰蜒", name_en: "House Centipede", formula: &["k=x/4-12.5  e=y/9+5  o=sqrt(k*k+e*e)/9", "q=x+99+tan(1/k)+o k (cos(9e)/4+cos(y/2))sin(4o-t)", "c=o e/30-t/8"], dt: std::f64::consts::PI / 90.0, fill: fill_youyan },
-    Species { id: "jichong", name: "脊虫", name_en: "Spine Worm", formula: &["e=y/8-13", "k=(4+3 sin(2y-t))cos(x/29)  d=sqrt(k*k+e*e)", "q=3 sin(2k)+0.3/k+sin(y/25)*k*(9+4 sin(9e-3d+2t))"], dt: std::f64::consts::PI / 240.0, fill: fill_jichong },
-    Species { id: "jelly", name: "小水母", name_en: "Jellyfish", formula: &["k=5 cos(x/14)cos(y/30)  e=y/8-13", "d=(k*k+e*e)/59+4  a=atan2(k,e)", "q=60-3 sin(a e)+k(3+4/d sin(d*d-2t))"], dt: std::f64::consts::PI / 20.0, fill: fill_jelly },
-    Species { id: "nebula", name: "星云水母", name_en: "Nebula Jelly", formula: &["k=x/8-12.5  e=y/8-12.5", "o=(k*k+e*e)/169  d=0.5+5 cos(o)", "X=x+d k sin(2d+o+t)+e cos(e+t)"], dt: std::f64::consts::PI / 120.0, fill: fill_nebula },
-    Species { id: "lantern", name: "花水母", name_en: "Lantern Jelly", formula: &["k=9 cos(x/8)  e=y/8-12.5", "d=(k*k+e*e)/99+sin(t)/6+0.5", "q=99-e sin(7 atan2(k,e))/d+k(3+2 cos(d*d-t))"], dt: std::f64::consts::PI / 120.0, fill: fill_lantern },
-    Species { id: "feather", name: "羽鳃", name_en: "Feather Gill", formula: &["y=i/790  k=6+6 sin(floor(y))", "d=sqrt((k cos(i+t/4))^2+(y/3-13)^2)", "q=y k cos(i+t/4)/5*(2+sin(2d+y-4t))"], dt: std::f64::consts::PI / 90.0, fill: fill_feather },
-    Species { id: "tentacle", name: "触须虫", name_en: "Tentacle Worm", formula: &["y=i/345  e=y/7-13  k=x cos(i-t/4)", "d=sqrt(k*k+e*e)+0.5 sin(e/4+t)", "q=y k/d*(3+sin(2d+y/2-4t))"], dt: std::f64::consts::PI / 120.0, fill: fill_tentacle },
-    Species { id: "flower6", name: "六瓣花", name_en: "Six-petal", formula: &["k=(i%25)-12  e=i/800", "d=7 cos(sqrt(k*k+e*e)/3+t/2)", "rotate PI/3 x 6"], dt: std::f64::consts::PI / 240.0, fill: fill_flower6 },
-    Species { id: "wheel", name: "轮虫花", name_en: "Rotifer Wheel", formula: &["k=(i%50)-25  e=i/1100", "d=5 cos(sqrt(k*k+e*e)-t)", "rotate PI/7 x 14"], dt: std::f64::consts::PI / 240.0, fill: fill_wheel },
-    Species { id: "spiral", name: "螺灯", name_en: "Spiral Lamp", formula: &["k=x/5-12  e=y/8-8  o=sqrt(k*k+e*e)/8", "c=1.15 o+t/5", "q=22+10 sin(0.8e+t)+k(1.6+0.35 sin(3o-t))"], dt: std::f64::consts::PI / 90.0, fill: fill_spiral },
-    Species { id: "comb", name: "栉水母", name_en: "Comb Jelly", formula: &["k=7 cos(x/10)cos(y/35)  e=y/8-12", "d=(k*k+e*e)/70+3  a=atan2(k,e)", "q=48-4 sin(4a)+k(2.2+3/d sin(d*d-t))"], dt: std::f64::consts::PI / 80.0, fill: fill_comb },
-    Species { id: "saweel", name: "锯鳗", name_en: "Saw Eel", formula: &["e=y/9-12", "k=(3.5+2.4 sin(1.6y-t))cos(x/22)  d=sqrt(k*k+e*e)", "q=2.2 sin(3k)+0.25/k+sin(y/18)*k*(7+3 sin(6e-2d+2t))"], dt: std::f64::consts::PI / 180.0, fill: fill_saw_eel },
-    Species { id: "star8", name: "八腕星", name_en: "Octo Star", formula: &["k=(i%20)-10  e=i/900", "d=6 cos(sqrt(k*k+e*e)/4+t/3)", "rotate PI/4 x 8"], dt: std::f64::consts::PI / 200.0, fill: fill_star8 },
-    Species { id: "shrimp", name: "磷虾", name_en: "Krill", formula: &["k=x/4-12.5  e=y/8+3.5  o=sqrt(k*k+e*e)/8", "q=55+10 sin(0.8k)+k(2.2+0.55 o sin(0.7y-t))", "c=o/3.2+e/22-t/9"], dt: std::f64::consts::PI / 70.0, fill: fill_shrimp },
-    Species { id: "vortex", name: "涡虫", name_en: "Vortex Worm", formula: &["r=sqrt(x*x+y*y)/38  th=atan2(y,x)", "R=62+22 sin(3 th+t)+10 sin(5r-2t)", "<R cos(th+0.45r+t/7), 0.9 R sin(...)>"], dt: std::f64::consts::PI / 100.0, fill: fill_vortex },
-    Species { id: "angel", name: "海天使", name_en: "Sea Angel", formula: &["k=6.5 cos(x/12)cos(y/38)  e=y/9-11", "d=(k*k+e*e)/68+2.4  a=atan2(k,e)", "q=38-5 sin(3a)+k(2+3.2/d sin(2.2d-t))"], dt: std::f64::consts::PI / 90.0, fill: fill_angel },
+    Species { id: "fucan", name: "北斗浮蚕", name_en: "Beidou Fucan", formula: &["k=x/4-12.5  e=y/9+6  o=sqrt(k*k+e*e)/9", "c=o/2+e/2-t/4", "q=(3/k)(0.5*tan(y/2)+cos y)+k(5/o+o*sin y*sin(e+4o-t))"], dt: std::f64::consts::PI / 90.0, heading: HeadingKind::SpineNoLegs, fill: fill_fucan },
+    Species { id: "youyan", name: "蚰蜒", name_en: "House Centipede", formula: &["k=x/4-12.5  e=y/9+5  o=sqrt(k*k+e*e)/9", "q=x+99+tan(1/k)+o k (cos(9e)/4+cos(y/2))sin(4o-t)", "c=o e/30-t/8"], dt: std::f64::consts::PI / 90.0, heading: HeadingKind::SpineNoLegs, fill: fill_youyan },
+    Species { id: "jichong", name: "脊虫", name_en: "Spine Worm", formula: &["e=y/8-13", "k=(4+3 sin(2y-t))cos(x/29)  d=sqrt(k*k+e*e)", "q=3 sin(2k)+0.3/k+sin(y/25)*k*(9+4 sin(9e-3d+2t))"], dt: std::f64::consts::PI / 240.0, heading: HeadingKind::Spine, fill: fill_jichong },
+    Species { id: "jelly", name: "小水母", name_en: "Jellyfish", formula: &["k=5 cos(x/14)cos(y/30)  e=y/8-13", "d=(k*k+e*e)/59+4  a=atan2(k,e)", "q=60-3 sin(a e)+k(3+4/d sin(d*d-2t))"], dt: std::f64::consts::PI / 20.0, heading: HeadingKind::Bell, fill: fill_jelly },
+    Species { id: "nebula", name: "星云水母", name_en: "Nebula Jelly", formula: &["k=x/8-12.5  e=y/8-12.5", "o=(k*k+e*e)/169  d=0.5+5 cos(o)", "X=x+d k sin(2d+o+t)+e cos(e+t)"], dt: std::f64::consts::PI / 120.0, heading: HeadingKind::Bell, fill: fill_nebula },
+    Species { id: "lantern", name: "花水母", name_en: "Lantern Jelly", formula: &["k=9 cos(x/8)  e=y/8-12.5", "d=(k*k+e*e)/99+sin(t)/6+0.5", "q=99-e sin(7 atan2(k,e))/d+k(3+2 cos(d*d-t))"], dt: std::f64::consts::PI / 120.0, heading: HeadingKind::Bell, fill: fill_lantern },
+    Species { id: "feather", name: "羽鳃", name_en: "Feather Gill", formula: &["y=i/790  k=6+6 sin(floor(y))", "d=sqrt((k cos(i+t/4))^2+(y/3-13)^2)", "q=y k cos(i+t/4)/5*(2+sin(2d+y-4t))"], dt: std::f64::consts::PI / 90.0, heading: HeadingKind::Spine, fill: fill_feather },
+    Species { id: "tentacle", name: "触须虫", name_en: "Tentacle Worm", formula: &["y=i/345  e=y/7-13  k=x cos(i-t/4)", "d=sqrt(k*k+e*e)+0.5 sin(e/4+t)", "q=y k/d*(3+sin(2d+y/2-4t))"], dt: std::f64::consts::PI / 120.0, heading: HeadingKind::Spine, fill: fill_tentacle },
+    Species { id: "flower6", name: "六瓣花", name_en: "Six-petal", formula: &["k=(i%25)-12  e=i/800", "d=7 cos(sqrt(k*k+e*e)/3+t/2)", "rotate PI/3 x 6"], dt: std::f64::consts::PI / 240.0, heading: HeadingKind::Radial, fill: fill_flower6 },
+    Species { id: "wheel", name: "轮虫花", name_en: "Rotifer Wheel", formula: &["k=(i%50)-25  e=i/1100", "d=5 cos(sqrt(k*k+e*e)-t)", "rotate PI/7 x 14"], dt: std::f64::consts::PI / 240.0, heading: HeadingKind::Radial, fill: fill_wheel },
+    Species { id: "spiral", name: "螺灯", name_en: "Spiral Lamp", formula: &["k=x/5-12  e=y/8-8  o=sqrt(k*k+e*e)/8", "c=1.15 o+t/5", "q=22+10 sin(0.8e+t)+k(1.6+0.35 sin(3o-t))"], dt: std::f64::consts::PI / 90.0, heading: HeadingKind::Spine, fill: fill_spiral },
+    Species { id: "comb", name: "栉水母", name_en: "Comb Jelly", formula: &["k=7 cos(x/10)cos(y/35)  e=y/8-12", "d=(k*k+e*e)/70+3  a=atan2(k,e)", "q=48-4 sin(4a)+k(2.2+3/d sin(d*d-t))"], dt: std::f64::consts::PI / 80.0, heading: HeadingKind::Bell, fill: fill_comb },
+    Species { id: "saweel", name: "锯鳗", name_en: "Saw Eel", formula: &["e=y/9-12", "k=(3.5+2.4 sin(1.6y-t))cos(x/22)  d=sqrt(k*k+e*e)", "q=2.2 sin(3k)+0.25/k+sin(y/18)*k*(7+3 sin(6e-2d+2t))"], dt: std::f64::consts::PI / 180.0, heading: HeadingKind::Spine, fill: fill_saw_eel },
+    Species { id: "star8", name: "八腕星", name_en: "Octo Star", formula: &["k=(i%20)-10  e=i/900", "d=6 cos(sqrt(k*k+e*e)/4+t/3)", "rotate PI/4 x 8"], dt: std::f64::consts::PI / 200.0, heading: HeadingKind::Radial, fill: fill_star8 },
+    Species { id: "shrimp", name: "磷虾", name_en: "Krill", formula: &["k=x/4-12.5  e=y/8+3.5  o=sqrt(k*k+e*e)/8", "q=55+10 sin(0.8k)+k(2.2+0.55 o sin(0.7y-t))", "c=o/3.2+e/22-t/9"], dt: std::f64::consts::PI / 70.0, heading: HeadingKind::Spine, fill: fill_shrimp },
+    Species { id: "vortex", name: "涡虫", name_en: "Vortex Worm", formula: &["r=sqrt(x*x+y*y)/38  th=atan2(y,x)", "R=62+22 sin(3 th+t)+10 sin(5r-2t)", "<R cos(th+0.45r+t/7), 0.9 R sin(...)>"], dt: std::f64::consts::PI / 100.0, heading: HeadingKind::Spine, fill: fill_vortex },
+    Species { id: "angel", name: "海天使", name_en: "Sea Angel", formula: &["k=6.5 cos(x/12)cos(y/38)  e=y/9-11", "d=(k*k+e*e)/68+2.4  a=atan2(k,e)", "q=38-5 sin(3a)+k(2+3.2/d sin(2.2d-t))"], dt: std::f64::consts::PI / 90.0, heading: HeadingKind::Torso, fill: fill_angel },
 ];
+
+#[cfg(test)]
+mod heading_kind_tests {
+    use super::*;
+
+    #[test]
+    fn every_species_declares_heading() {
+        for s in SPECIES {
+            match s.id {
+                "jelly" | "nebula" | "lantern" | "comb" => {
+                    assert_eq!(s.heading, HeadingKind::Bell, "{}", s.id)
+                }
+                "flower6" | "wheel" | "star8" => {
+                    assert_eq!(s.heading, HeadingKind::Radial, "{}", s.id)
+                }
+                "fucan" | "youyan" => {
+                    assert_eq!(s.heading, HeadingKind::SpineNoLegs, "{}", s.id)
+                }
+                "angel" => assert_eq!(s.heading, HeadingKind::Torso),
+                _ => assert_eq!(s.heading, HeadingKind::Spine, "{}", s.id),
+            }
+        }
+    }
+}
