@@ -216,7 +216,7 @@ pub fn drive(kind: GaitKind, g: Gait, phi: f64, amp: f64, bias: f64, speed: f64,
     if pulsed {
         spd = spd.max(g.cruise * amp * 0.70);
     }
-    spd = spd.clamp(0.0, 0.048);
+    spd = spd.clamp(0.0, 0.10);
 
     Drive {
         speed: spd,

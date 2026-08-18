@@ -4,6 +4,12 @@
 
 **Cyber Ocean Screensaver** is a cross-platform **screensaver** and **live wallpaper**. Parametric sea-life — jellyfish, comb jellies, krill, worms, sea angels — swim as white particles on deep navy water. Linux, Windows, and macOS. Python gallery plus a native Rust / wgpu engine.
 
+## 1.0.3
+
+同种磷虾会在定向圈里对齐航向：圈内跟邻居平均朝向，圈外弱吸引。默认 `slip=0.174`、`zone=1.614`。
+
+Same-species krill now align inside an orientation zone — they match neighbors' heading inside the zone and only attract weakly outside it. Defaults: `slip=0.174`, `zone=1.614`.
+
 ## 截图 / Screenshots
 
 ![赛博海洋与动态图例 / Cyber ocean with live legend](docs/screenshots/ocean.png)
@@ -155,7 +161,7 @@ The legend at the top-left lists every creature in the tank:
 | 栉水母 | Comb Jelly | 原创 | original |
 | 锯鳗 | Saw Eel | 原创 | original |
 | 八腕星 | Octo Star | 原创 | original |
-| 磷虾 | Krill | 原创 | original |
+| 磷虾 | Krill | 定向圈成群 | orientation-zone school |
 | 涡虫 | Vortex Worm | 原创 | original |
 | 海天使 | Sea Angel | 原创 | original |
 

@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::formulas::{FillFn, SPECIES, VIEW};
-use crate::life::{kind_life, LifeParams, LIFE};
+use crate::life::{species_life, LifeParams, LIFE};
 
 fn cpu_workers() -> usize {
     std::thread::available_parallelism()
@@ -301,6 +301,14 @@ fn species_face(ci: usize, t: f64) -> f64 {
     wrap_pi(SPECIES_FACE[ci] + SPECIES_FACE_RATE[ci] * t)
 }
 
+fn paced_gait(g: crate::gait::Gait, pace: f64) -> crate::gait::Gait {
+    let mut g = g;
+    let p = pace.clamp(0.70, 2.80);
+    g.cruise *= p;
+    g.pulse *= p;
+    g
+}
+
 pub fn advance_morph(inst: &mut [Creature], dt: f64) {
     for c in inst.iter_mut() {
         let spec = &SPECIES[c.ci];
@@ -369,17 +377,28 @@ pub fn integrate_with(
     let mut nd = vec![f64::MAX; n];
     let mut nnx = vec![0.0; n];
     let mut nny = vec![0.0; n];
+    let mut same_nd = vec![f64::MAX; n];
+    let mut orient_hx = vec![0.0; n];
+    let mut orient_hy = vec![0.0; n];
+    let mut orient_n = vec![0.0; n];
+    let mut attract_dx = vec![0.0; n];
+    let mut attract_dy = vec![0.0; n];
+    let mut attract_n = vec![0.0; n];
+    let mut in_repulse = vec![false; n];
+    let mut align_mean = vec![f64::NAN; n];
     for a in 0..n {
-        let ka = kind_life(crate::gait::gait(inst[a].ci).kind, life);
+        let ka = species_life(inst[a].ci, life);
         let ra = inst[a].scale * life.body * ka.space;
         for b in (a + 1)..n {
             let ddx = inst[a].x - inst[b].x;
             let ddy = inst[a].y - inst[b].y;
             let dd = (ddx * ddx + ddy * ddy).sqrt();
             if dd < 1e-5 {
+                inst[a].x += 0.003;
+                inst[b].x -= 0.003;
                 continue;
             }
-            let kb = kind_life(crate::gait::gait(inst[b].ci).kind, life);
+            let kb = species_life(inst[b].ci, life);
             let rb = inst[b].scale * life.body * kb.space;
             let contact = (ra + rb) * life.near;
             let far = contact * life.far;
@@ -401,6 +420,12 @@ pub fn integrate_with(
                 inst[a].fy += ny * w;
                 inst[b].fx -= nx * w;
                 inst[b].fy -= ny * w;
+                // 重叠必须把身体推开；只拧航向会穿模、看起来像横移叠在一起。
+                let sep = (contact - dd) * 0.42;
+                inst[a].x += nx * sep;
+                inst[a].y += ny * sep;
+                inst[b].x -= nx * sep;
+                inst[b].y -= ny * sep;
             }
             if dd < nd[a] {
                 nd[a] = dd;
@@ -411,6 +436,56 @@ pub fn integrate_with(
                 nd[b] = dd;
                 nnx[b] = -nx;
                 nny[b] = -ny;
+            }
+            if inst[a].ci == inst[b].ci {
+                if dd < same_nd[a] {
+                    same_nd[a] = dd;
+                }
+                if dd < same_nd[b] {
+                    same_nd[b] = dd;
+                }
+                if dd < contact {
+                    in_repulse[a] = true;
+                    in_repulse[b] = true;
+                } else {
+                    let za = ka.zone.clamp(1.60, 2.80);
+                    let zb = kb.zone.clamp(1.60, 2.80);
+                    let oh_a = contact * za;
+                    let oh_b = contact * zb;
+                    let ah_a = contact * (za + 1.15);
+                    let ah_b = contact * (zb + 1.15);
+                    let fwd_ax = inst[a].rot.cos();
+                    let fwd_ay = -inst[a].rot.sin();
+                    let fwd_bx = inst[b].rot.cos();
+                    let fwd_by = -inst[b].rot.sin();
+                    // 盲区：背后的邻居不进定向平均，避免环流里对向互相抵消。
+                    let see_b = fwd_ax * (-nx) + fwd_ay * (-ny) > -0.55;
+                    let see_a = fwd_bx * nx + fwd_by * ny > -0.55;
+                    if dd < oh_a {
+                        if see_b {
+                            let w = (1.0 - dd / oh_a).clamp(0.0, 1.0).powi(2);
+                            orient_hx[a] += inst[b].rot.cos() * w;
+                            orient_hy[a] += inst[b].rot.sin() * w;
+                            orient_n[a] += w;
+                        }
+                    } else if dd < ah_a {
+                        attract_dx[a] -= nx;
+                        attract_dy[a] -= ny;
+                        attract_n[a] += 1.0;
+                    }
+                    if dd < oh_b {
+                        if see_a {
+                            let w = (1.0 - dd / oh_b).clamp(0.0, 1.0).powi(2);
+                            orient_hx[b] += inst[a].rot.cos() * w;
+                            orient_hy[b] += inst[a].rot.sin() * w;
+                            orient_n[b] += w;
+                        }
+                    } else if dd < ah_b {
+                        attract_dx[b] += nx;
+                        attract_dy[b] += ny;
+                        attract_n[b] += 1.0;
+                    }
+                }
             }
         }
     }
@@ -455,7 +530,7 @@ pub fn integrate_with(
         let x1 = 1.0 - half;
         let y0 = half * 0.85;
         let y1 = 1.0 - half * 0.85;
-        let margin = 0.16;
+        let margin = 0.22;
         let mut wall_x = 0.0;
         let mut wall_y = 0.0;
         if c.x < x0 + margin {
@@ -471,7 +546,7 @@ pub fn integrate_with(
             wall_y -= (c.y - (y1 - margin)) / margin;
         }
 
-        let kl = kind_life(g.kind, life);
+        let kl = species_life(c.ci, life);
         let wfreq = match g.kind {
             crate::gait::GaitKind::Jet | crate::gait::GaitKind::Hover => 0.020,
             crate::gait::GaitKind::SpinDrift => 0.018,
@@ -481,7 +556,8 @@ pub fn integrate_with(
         let mut bdes = kl.wander * (ocean_t * wfreq + c.phase).sin();
         let steer_f = match g.kind {
             crate::gait::GaitKind::SpinDrift | crate::gait::GaitKind::Helix => 0.05,
-            crate::gait::GaitKind::Hover | crate::gait::GaitKind::Jet => 0.14,
+            crate::gait::GaitKind::Hover => 0.18,
+            crate::gait::GaitKind::Jet => 0.32,
             _ => 0.20,
         };
         bdes += (fwd_x * c.fy - fwd_y * c.fx) * steer_f;
@@ -492,10 +568,17 @@ pub fn integrate_with(
         let g_w = if nnd_hint < 0.16 { 0.22 } else { 1.0 };
         let g_scale = match g.kind {
             crate::gait::GaitKind::SpinDrift => 0.12,
+            crate::gait::GaitKind::Hover | crate::gait::GaitKind::Jet => 0.18,
+            crate::gait::GaitKind::Ciliary => 0.28,
             crate::gait::GaitKind::Helix => 0.30,
             _ => 1.0,
         };
-        bdes += (fwd_x * gny - fwd_y * gnx) * life.gyre * g_w * g_scale;
+        let flocking = orient_n[i] >= 1.0;
+        if !flocking {
+            bdes += (fwd_x * gny - fwd_y * gnx) * life.gyre * g_w * g_scale;
+            // 环流直接拧航向：同种定向时关掉，否则平均航向被环流抵消。
+            c.rot += (fwd_x * gny - fwd_y * gnx) * life.gyre * 8.0 * g_scale * dt;
+        }
 
         if pointer_on {
             let px = side_g + c.x * inner_w + cam_x;
@@ -512,9 +595,38 @@ pub fn integrate_with(
             }
         }
 
+        let my_r = c.scale * life.body * kl.space;
+        // Couzin：互斥优先；否则定向圈内跟所有同种邻居航向平均；再否则圈外弱吸引。
+        // slip = 对齐增益，yaw 只在后面让路。
+        if crate::life::heading_is_trainable(c.ci) && !in_repulse[i] {
+            // slip 只调对齐强弱；增益封顶，避免顶满后振荡、把学校甩散。
+            let gain = (0.20 + 0.62 * (kl.slip / 1.10).clamp(0.0, 1.0)).min(0.82);
+            if orient_n[i] >= 1e-3 {
+                let mean = orient_hy[i].atan2(orient_hx[i]);
+                align_mean[i] = mean;
+                let drot = wrap_pi(mean - rot0);
+                c.rot += drot * gain * dt;
+            } else if attract_n[i] >= 1.0 {
+                let ax = attract_dx[i] / attract_n[i];
+                let ay = attract_dy[i] / attract_n[i];
+                let an = ax.hypot(ay).max(1e-9);
+                let cross = fwd_x * (ay / an) - fwd_y * (ax / an);
+                c.rot += cross * 0.22 * dt;
+            }
+        }
+
         c.bias += dt * 0.55 * (bdes.clamp(-0.7, 0.7) - c.bias);
-        let d = crate::gait::drive(g.kind, g, c.phi, c.amp, c.bias, c.speed, dt);
-        c.speed = (d.speed + kick * dt).clamp(0.0, 0.048);
+        let d = crate::gait::drive(
+            g.kind,
+            paced_gait(g, kl.pace),
+            c.phi,
+            c.amp,
+            c.bias,
+            c.speed,
+            dt,
+        );
+        let cap = (0.048 * kl.pace).clamp(0.048, 0.10);
+        c.speed = (d.speed + kick * dt).clamp(0.0, cap);
         c.rot += d.d_rot;
         c.pose_spin += d.spin_vis;
         c.bell = d.bell;
@@ -527,43 +639,42 @@ pub fn integrate_with(
             let wx = wall_x / wn;
             let wy = wall_y / wn;
             let inward = fwd_x * wx + fwd_y * wy;
-            if inward < 0.30 {
+            // 只在这里选定离开方向；真正转角放在 max_yaw 夹紧之后，避免被游荡吃掉。
+            if inward < 0.78 {
                 if c.wall_dir.abs() < 0.5 {
-                    let cross = fwd_x * wy - fwd_y * wx;
-                    c.wall_dir = if cross.abs() > 0.05 {
-                        cross.signum()
+                    // d(inward)/d(rot)：朝开阔处的短弧，不要先拧进墙再绕一圈。
+                    let din = fwd_y * wx - fwd_x * wy;
+                    c.wall_dir = if din.abs() > 0.05 {
+                        din.signum()
                     } else if c.phase > std::f64::consts::PI {
                         1.0
                     } else {
                         -1.0
                     };
                 }
-                let need = (0.30 - inward).clamp(0.0, 1.0);
-                let yaw = 0.42 * need * (0.45 + 0.55 * wn.min(1.0));
-                c.rot += c.wall_dir * yaw * dt;
-                fwd_x = c.rot.cos();
-                fwd_y = -c.rot.sin();
             } else {
                 c.wall_dir = 0.0;
             }
             let into = (-fwd_x * wall_x - fwd_y * wall_y).max(0.0);
             if into > 0.0 {
-                c.speed *= (1.0 - 0.35 * (into / wn.max(1e-6)).min(1.0)).max(0.55);
+                let frac = (into / wn.max(1e-6)).min(1.0);
+                c.speed *= (1.0 - 1.8 * frac * dt).max(0.0);
             }
         } else {
             c.wall_dir = 0.0;
         }
 
-        let my_r = c.scale * life.body * kl.space;
         let sense = match g.kind {
             crate::gait::GaitKind::Jet | crate::gait::GaitKind::Hover => {
-                (my_r * 2.20).clamp(0.055, 0.11)
+                (my_r * 3.60).clamp(0.085, 0.18)
             }
             crate::gait::GaitKind::SpinDrift => (my_r * 2.30).clamp(0.060, 0.12),
             _ => (my_r * (2.35 + 1.05 * kl.shy)).clamp(0.070, 0.16),
         };
         let nnd = nd[i];
-        let mut on_course = false;
+        let contact_est = my_r * life.near;
+        let overlapping = nnd.is_finite() && nnd < contact_est;
+        let mut on_course = overlapping;
         if nnd < 0.24 {
             let nx = nnx[i];
             let ny = nny[i];
@@ -580,9 +691,10 @@ pub fn integrate_with(
                 sense
             };
             let prox = (1.0 - nnd / range.max(1e-6)).clamp(0.0, 1.0);
-            on_course = nnd < range && closing > 0.20 && impact < hit_r;
-            if on_course || (loom && nnd < range) {
-                on_course = true;
+            on_course = overlapping
+                || (nnd < range && closing > 0.12 && impact < hit_r * 1.35)
+                || (loom && nnd < range);
+            if on_course {
                 if c.evade_t <= 0.0 || c.evade_dir.abs() < 0.5 {
                     let cross = fwd_x * ny - fwd_y * nx;
                     c.evade_dir = if cross.abs() > 0.06 {
@@ -593,13 +705,16 @@ pub fn integrate_with(
                         -1.0
                     };
                 }
-                let urgency = (1.0 - (impact / hit_r.max(1e-6)).clamp(0.0, 1.0))
-                    * closing.clamp(0.0, 1.0)
-                    * (0.45 + 0.55 * prox);
+                let urgency = if overlapping {
+                    (0.55 + 0.45 * prox).max(0.40)
+                } else {
+                    (1.0 - (impact / hit_r.max(1e-6)).clamp(0.0, 1.0))
+                        * closing.clamp(0.0, 1.0)
+                        * (0.45 + 0.55 * prox)
+                };
                 c.evade_t = (0.18 + 0.28 * urgency).max(c.evade_t);
-                // 已经擦得开就侧滑，不要继续拧航向画圈。
-                if impact < hit_r * 0.88 {
-                    let yaw = kl.yaw * urgency.max(0.12);
+                if overlapping || impact < hit_r * 0.88 {
+                    let yaw = kl.yaw * urgency.max(if overlapping { 0.40 } else { 0.12 });
                     c.rot += c.evade_dir * yaw * dt;
                 }
                 c.speed *= (1.0 - kl.brake * urgency * 0.35).max(0.62);
@@ -617,39 +732,62 @@ pub fn integrate_with(
             c.evade_dir = 0.0;
         }
 
-        let max_yaw = match g.kind {
-            crate::gait::GaitKind::SpinDrift => 0.16,
-            crate::gait::GaitKind::Helix => 0.20,
-            crate::gait::GaitKind::Hover => 0.22,
-            crate::gait::GaitKind::Jet => 0.20,
-            crate::gait::GaitKind::Ciliary => 0.28,
-            _ => 0.40,
+        let mut max_yaw: f64 = match g.kind {
+            crate::gait::GaitKind::SpinDrift => 0.18,
+            crate::gait::GaitKind::Hover => 0.32,
+            crate::gait::GaitKind::Jet => 0.55,
+            crate::gait::GaitKind::Helix => 0.55,
+            crate::gait::GaitKind::Ciliary => 0.62,
+            _ => 0.85,
         };
+        if on_course {
+            max_yaw = max_yaw.max(1.60);
+        }
+        if align_mean[i].is_finite() {
+            max_yaw = max_yaw.max(1.45);
+        }
+        // 贴边时允许更快转弯，避免撞墙后沿轴滑出直角折。
+        if wn > 0.10 {
+            max_yaw = max_yaw.max(0.88).min(1.20);
+        }
         let dheading = wrap_pi(c.rot - rot0);
         c.rot = rot0 + dheading.clamp(-max_yaw * dt, max_yaw * dt);
+        if align_mean[i].is_finite() && !in_repulse[i] && c.evade_t <= 0.0 && wn < 0.08 {
+            let d = wrap_pi(align_mean[i] - c.rot);
+            c.rot += d.clamp(-0.95 * dt, 0.95 * dt);
+        }
         fwd_x = c.rot.cos();
         fwd_y = -c.rot.sin();
+        if wn > 0.06 && c.wall_dir.abs() > 0.5 {
+            let wx = wall_x / wn;
+            let wy = wall_y / wn;
+            let inward = fwd_x * wx + fwd_y * wy;
+            if inward < 0.78 {
+                c.rot += c.wall_dir * (0.82 - inward).clamp(0.0, 1.0) * 0.85 * dt;
+                fwd_x = c.rot.cos();
+                fwd_y = -c.rot.sin();
+            } else {
+                c.wall_dir = 0.0;
+            }
+        }
         if g.kind == crate::gait::GaitKind::Jet {
-            // 触手被动随流：画面朝向滞后于喷水轴，转向时触手扫过尾流。
-            let stream = (c.speed / g.cruise.max(1e-6)).clamp(0.45, 1.6);
-            let tau = 0.42 / stream;
+            // 触手只允许很小的随流滞后；大滞后会看起来像伞盖朝前、身体横着挪。
+            let stream = (c.speed / (g.cruise * kl.pace).max(1e-6)).clamp(0.45, 1.6);
+            let tau = 0.12 / stream;
             let old_vis = rot0 + c.pose_sway;
             let a = 1.0 - (-dt / tau).exp();
             let new_vis = old_vis + wrap_pi(c.rot - old_vis) * a;
-            c.pose_sway = wrap_pi(new_vis - c.rot).clamp(-0.36, 0.36);
+            c.pose_sway = wrap_pi(new_vis - c.rot).clamp(-0.08, 0.08);
         }
 
         if on_course {
             c.speed *= 0.92;
         }
         let drift = 0.0014 * (ocean_t * 0.07 + c.phase).sin();
-        // 前进只沿航向：让路靠转向，不靠横移。
+        // 前进只沿航向：让路靠转向，不靠横移。重叠时另加径向推开。
         c.vx = c.speed * fwd_x;
         c.vy = c.speed * fwd_y;
-        if matches!(
-            g.kind,
-            crate::gait::GaitKind::Jet | crate::gait::GaitKind::Hover
-        ) {
+        if g.kind == crate::gait::GaitKind::Hover {
             c.vy += g.rise;
         }
         if matches!(
@@ -665,11 +803,11 @@ pub fn integrate_with(
             let out = (-c.vx * wx - c.vy * wy).max(0.0);
             c.vx += wx * out;
             c.vy += wy * out;
-        }
-        if !matches!(
+        } else if !matches!(
             g.kind,
             crate::gait::GaitKind::SpinDrift | crate::gait::GaitKind::Hover
         ) {
+            // 贴边时不要再投影回航向：外向被消掉后投影会把速度归零，变成沿墙停/滑。
             let along = (c.vx * fwd_x + c.vy * fwd_y).max(0.0);
             c.vx = along * fwd_x;
             c.vy = along * fwd_y;
@@ -677,18 +815,47 @@ pub fn integrate_with(
         c.x += c.vx * dt;
         c.y += c.vy * dt;
 
-        if c.x < x0 {
-            c.x = x0;
-        } else if c.x > x1 {
-            c.x = x1;
-        }
-        if c.y < y0 {
-            c.y = y0;
-        } else if c.y > y1 {
-            c.y = y1;
-        }
+        let hit_x = c.x < x0 || c.x > x1;
+        let hit_y = c.y < y0 || c.y > y1;
         c.x = c.x.clamp(x0, x1);
         c.y = c.y.clamp(y0, y1);
+        if hit_x || hit_y {
+            let out_x: f64 = if c.x <= x0 + 1e-12 {
+                1.0
+            } else if c.x >= x1 - 1e-12 {
+                -1.0
+            } else {
+                0.0
+            };
+            let out_y: f64 = if c.y <= y0 + 1e-12 {
+                1.0
+            } else if c.y >= y1 - 1e-12 {
+                -1.0
+            } else {
+                0.0
+            };
+            let on = (out_x * out_x + out_y * out_y).sqrt().max(1e-9_f64);
+            let ox = out_x / on;
+            let oy = out_y / on;
+            // 撞上就朝开阔处转，不要改贴边巡游（那会画出直角折）。
+            let target = (-oy).atan2(ox);
+            let d = wrap_pi(target - c.rot);
+            c.rot += d.clamp(-0.10, 0.10);
+            c.wall_dir = 0.0;
+            c.x += ox * 0.006;
+            c.y += oy * 0.006;
+            c.x = c.x.clamp(x0, x1);
+            c.y = c.y.clamp(y0, y1);
+            c.speed = (c.speed * (1.0 - 1.2 * dt)).max(0.010);
+            let (ca, sa) = (c.rot.cos(), c.rot.sin());
+            c.vx = c.speed * ca;
+            c.vy = -c.speed * sa;
+            let out_comp = c.vx * ox + c.vy * oy;
+            if out_comp < 0.006 {
+                c.vx += ox * (0.010 - out_comp);
+                c.vy += oy * (0.010 - out_comp);
+            }
+        }
         let breathe = c.bell * (1.0 + 0.04 * c.pulse);
         let dsc = c.scale * breathe * dworld as f64 / VIEW;
         let px = ds as f64 + c.x * diw as f64;
@@ -923,11 +1090,57 @@ fn emit_creature_points(
 
 #[cfg(test)]
 pub fn simulate_school(seed: u32, count: usize, seconds: f64, life: &LifeParams) -> crate::life::SchoolStats {
+    simulate_school_as(seed, count, seconds, life, None)
+}
+
+/// 同种学校：8 只同一数字生物，对照该种自己的指标。
+#[cfg(test)]
+pub fn simulate_species(
+    seed: u32,
+    ci: usize,
+    count: usize,
+    seconds: f64,
+    life: &LifeParams,
+) -> crate::life::SchoolStats {
+    simulate_school_as(seed, count, seconds, life, Some(ci.min(SPECIES.len() - 1)))
+}
+
+#[cfg(test)]
+fn simulate_school_as(
+    seed: u32,
+    count: usize,
+    seconds: f64,
+    life: &LifeParams,
+    as_ci: Option<usize>,
+) -> crate::life::SchoolStats {
     let mut inst = spawn_with(seed, count);
+    if let Some(ci) = as_ci {
+        let g = crate::gait::gait(ci);
+        let pace = species_life(ci, life).pace;
+        let omega = g.hz * std::f64::consts::TAU;
+        let speed = g.cruise * pace;
+        let face = species_face(ci, 0.0);
+        for c in &mut inst {
+            c.ci = ci;
+            c.omega = omega;
+            c.speed = speed;
+            let ang = c.rot;
+            c.vx = speed * ang.cos();
+            c.vy = -speed * ang.sin();
+            c.face = face;
+        }
+    }
     let scratches = vec![Vec::new(); inst.len()];
     let dt = 1.0 / 60.0;
     let nsteps = (seconds / dt) as usize;
-    let warmup = ((1.2 / dt) as usize).min(nsteps / 4);
+    // 同种学校：前 60% 只用来进稳态，极化/间距只报后 40%。
+    let warmup = if as_ci.is_some() {
+        let settle = ((seconds * 0.50) / dt) as usize;
+        let keep = ((3.0 / dt) as usize).max(1);
+        settle.min(nsteps.saturating_sub(keep))
+    } else {
+        ((1.2 / dt) as usize).min(nsteps / 4)
+    };
     let n = inst.len();
     let mut nn_acc = 0.0;
     let mut min_nn = f64::MAX;
@@ -945,6 +1158,26 @@ pub fn simulate_school(seed: u32, count: usize, seconds: f64, life: &LifeParams)
     let mut gyre_acc = 0.0;
     let mut cruise_acc = 0.0;
     let mut evade_n = 0.0;
+    let mut nnd_bl_acc = 0.0;
+    let mut min_nnd_bl = f64::MAX;
+    let mut yaw_samples: Vec<f64> = Vec::new();
+    let mut sharp_n = 0.0;
+    let mut sharp_d = 0.0;
+    let mut polar_acc = 0.0;
+    let mut polar_n = 0.0;
+    let mut prev_xy: Vec<(f64, f64)> = inst.iter().map(|c| (c.x, c.y)).collect();
+    let mut prev_head = vec![0.0; n];
+    let mut have_head = vec![false; n];
+    let mut kind_nnd = [0.0; 17];
+    let mut kind_nnd_n = [0.0; 17];
+    let mut kind_spd = [0.0; 17];
+    let mut kind_spd_n = [0.0; 17];
+    let mut kind_yaw: [Vec<f64>; 17] = std::array::from_fn(|_| Vec::new());
+    let mut kind_polar = [0.0; 17];
+    let mut kind_polar_n = [0.0; 17];
+    let mut speed_bl_acc = 0.0;
+    let mut speed_bl_n = 0.0;
+    const YAW_STRIDE: usize = 12; // 5 Hz @ 60 fps
     for step in 0..nsteps {
         advance_morph(&mut inst, dt);
         integrate_with(
@@ -960,23 +1193,37 @@ pub fn simulate_school(seed: u32, count: usize, seconds: f64, life: &LifeParams)
         if step < warmup {
             for (i, c) in inst.iter().enumerate() {
                 prev_rot[i] = c.rot;
+                prev_xy[i] = (c.x, c.y);
+                have_head[i] = false;
             }
             continue;
         }
         samples += 1.0;
         let mut frame_min = f64::MAX;
+        let mut frame_min_bl = f64::MAX;
+        let stride_frame = (step - warmup) % YAW_STRIDE == 0;
+        let mut pu_x = 0.0;
+        let mut pu_y = 0.0;
+        let mut pu_n = 0.0;
+        let mut kux = [0.0; 17];
+        let mut kuy = [0.0; 17];
+        let mut kun = [0.0; 17];
         for i in 0..n {
             let mut nn = f64::MAX;
+            let mut nn_bl = f64::MAX;
+            let bli = (inst[i].scale * life.body * 2.0).clamp(0.018, 0.16);
             for j in 0..n {
                 if i == j {
                     continue;
                 }
                 let d = (inst[i].x - inst[j].x).hypot(inst[i].y - inst[j].y);
                 nn = nn.min(d);
+                let blj = (inst[j].scale * life.body * 2.0).clamp(0.018, 0.16);
+                nn_bl = nn_bl.min(d / ((bli + blj) * 0.5));
                 if j > i {
                     closest = closest.min(d);
-                    let ka = kind_life(crate::gait::gait(inst[i].ci).kind, life);
-                    let kb = kind_life(crate::gait::gait(inst[j].ci).kind, life);
+                    let ka = species_life(inst[i].ci, life);
+                    let kb = species_life(inst[j].ci, life);
                     let contact = (inst[i].scale * life.body * ka.space
                         + inst[j].scale * life.body * kb.space)
                         * 0.85;
@@ -989,7 +1236,12 @@ pub fn simulate_school(seed: u32, count: usize, seconds: f64, life: &LifeParams)
                 }
             }
             frame_min = frame_min.min(nn);
+            frame_min_bl = frame_min_bl.min(nn_bl);
             nn_acc += nn;
+            nnd_bl_acc += nn_bl;
+            let ki = inst[i].ci.min(16);
+            kind_nnd[ki] += nn_bl;
+            kind_nnd_n[ki] += 1.0;
             let fx = inst[i].rot.cos();
             let fy = -inst[i].rot.sin();
             let v = (inst[i].vx * inst[i].vx + inst[i].vy * inst[i].vy).sqrt();
@@ -997,6 +1249,48 @@ pub fn simulate_school(seed: u32, count: usize, seconds: f64, life: &LifeParams)
                 align_acc += (fx * inst[i].vx + fy * inst[i].vy) / v;
             }
             let yaw = wrap_pi(inst[i].rot - prev_rot[i]) / dt;
+            if stride_frame {
+                let (px, py) = prev_xy[i];
+                let dx = inst[i].x - px;
+                let dy = inst[i].y - py;
+                let dist = (dx * dx + dy * dy).sqrt();
+                let dt_s = YAW_STRIDE as f64 * dt;
+                let vbl = if bli > 1e-6 {
+                    (dist / dt_s) / bli
+                } else {
+                    0.0
+                };
+                prev_xy[i] = (inst[i].x, inst[i].y);
+                // 只要在动就记转向/极化；文献 speed_floor 只在打分里罚游速项。
+                const MOVE_EPS: f64 = 0.008;
+                if vbl >= MOVE_EPS {
+                    kind_spd[ki] += vbl;
+                    kind_spd_n[ki] += 1.0;
+                    speed_bl_acc += vbl;
+                    speed_bl_n += 1.0;
+                    let h = dy.atan2(dx);
+                    pu_x += h.cos();
+                    pu_y += h.sin();
+                    pu_n += 1.0;
+                    kux[ki] += h.cos();
+                    kuy[ki] += h.sin();
+                    kun[ki] += 1.0;
+                    if have_head[i] {
+                        let dyaw = wrap_pi(h - prev_head[i]).abs();
+                        let rate = dyaw / dt_s;
+                        yaw_samples.push(rate);
+                        kind_yaw[ki].push(rate);
+                        sharp_d += 1.0;
+                        if dyaw > 75.0_f64.to_radians() {
+                            sharp_n += 1.0;
+                        }
+                    }
+                    prev_head[i] = h;
+                    have_head[i] = true;
+                } else {
+                    have_head[i] = false;
+                }
+            }
             if step > warmup + 8
                 && prev_yaw[i].signum() != 0.0
                 && yaw.signum() != 0.0
@@ -1008,7 +1302,9 @@ pub fn simulate_school(seed: u32, count: usize, seconds: f64, life: &LifeParams)
             prev_yaw[i] = yaw;
             prev_rot[i] = inst[i].rot;
             speed_acc += inst[i].speed;
-            let cruise = crate::gait::gait(inst[i].ci).cruise.max(1e-6);
+            let cruise = (crate::gait::gait(inst[i].ci).cruise
+                * crate::life::species_life(inst[i].ci, life).pace)
+                .max(1e-6);
             cruise_acc += inst[i].speed / cruise;
             if inst[i].evade_t > 0.0 {
                 evade_n += 1.0;
@@ -1025,6 +1321,19 @@ pub fn simulate_school(seed: u32, count: usize, seconds: f64, life: &LifeParams)
             }
         }
         min_nn = min_nn.min(frame_min);
+        min_nnd_bl = min_nnd_bl.min(frame_min_bl);
+        if stride_frame && pu_n >= 2.0 {
+            polar_acc += (pu_x / pu_n).hypot(pu_y / pu_n);
+            polar_n += 1.0;
+        }
+        if stride_frame {
+            for k in 0..17 {
+                if kun[k] >= 2.0 {
+                    kind_polar[k] += (kux[k] / kun[k]).hypot(kuy[k] / kun[k]);
+                    kind_polar_n[k] += 1.0;
+                }
+            }
+        }
     }
     let nf = n as f64;
     let pair_frames = samples * nf * (nf - 1.0) / 2.0;
@@ -1090,7 +1399,55 @@ pub fn simulate_school(seed: u32, count: usize, seconds: f64, life: &LifeParams)
         } else {
             0.0
         },
+        mean_nnd_bl: if samples > 0.0 {
+            nnd_bl_acc / (samples * nf)
+        } else {
+            0.0
+        },
+        min_nnd_bl: if min_nnd_bl.is_finite() { min_nnd_bl } else { 0.0 },
+        mean_abs_yaw: median_f64(&mut yaw_samples),
+        sharp_frac: if sharp_d > 0.0 { sharp_n / sharp_d } else { 0.0 },
+        polar: if polar_n > 0.0 { polar_acc / polar_n } else { 0.0 },
+        mean_speed_bl: if speed_bl_n > 0.0 {
+            speed_bl_acc / speed_bl_n
+        } else {
+            0.0
+        },
+        kinds: {
+            let mut kinds = [crate::life::KindBio::default(); 17];
+            for k in 0..17 {
+                kinds[k] = crate::life::KindBio {
+                    n: kind_nnd_n[k],
+                    nnd_bl: if kind_nnd_n[k] > 0.0 {
+                        kind_nnd[k] / kind_nnd_n[k]
+                    } else {
+                        0.0
+                    },
+                    yaw: median_f64(&mut kind_yaw[k]),
+                    polar: if kind_polar_n[k] > 0.0 {
+                        kind_polar[k] / kind_polar_n[k]
+                    } else {
+                        0.0
+                    },
+                    have_polar: kind_polar_n[k] > 0.0,
+                    speed_bl: if kind_spd_n[k] > 0.0 {
+                        kind_spd[k] / kind_spd_n[k]
+                    } else {
+                        0.0
+                    },
+                };
+            }
+            kinds
+        },
     }
+}
+
+fn median_f64(xs: &mut [f64]) -> f64 {
+    if xs.is_empty() {
+        return 0.0;
+    }
+    xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    xs[xs.len() / 2]
 }
 
 #[cfg(test)]
@@ -1137,7 +1494,10 @@ pub fn simulate_headon(life: &LifeParams) -> (f64, f64, f64) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::life::{evolve, evolve_from, score, LifeParams, LIFE};
+    use crate::life::{
+        evolve, evolve_species_cfg, score, score_species, species_space_cap, LifeParams,
+        SpeciesCma, SpeciesSearch, CMA_SIGMA0, LIFE,
+    };
     use std::io::Write;
 
     fn transform_pts(pts: &[[f32; 2]], cx: f64, cy: f64, face: f64) -> Vec<(f64, f64)> {
@@ -1445,6 +1805,11 @@ mod tests {
             (inst[0].face - super::species_face(inst[0].ci, inst[0].t)).abs() < 1e-6,
             "jelly must keep bell-forward jet axis"
         );
+        assert!(
+            inst[0].pose_sway.abs() < 0.10,
+            "jelly wake lag still looks like crab-walk sway={:.1}°",
+            inst[0].pose_sway.to_degrees()
+        );
         assert!(rms_vis < 14.0, "jelly still shaking {rms_vis:.1}°/s");
     }
 
@@ -1568,20 +1933,23 @@ mod tests {
     fn school_stays_spread() {
         let s = simulate_school(7, 17, 10.0, &LIFE);
         println!(
-            "school mean_nn={:.3} min={:.3} closest={:.3} graze={:.3} overlap={:.3} align={:.2} flips={:.2} H={:.2} gyre={:.2} cruise={:.2} evade={:.2} v={:.4} score={:.2}",
+            "school mean_nn={:.3} nnd_bl={:.2} min_bl={:.2} closest={:.3} graze={:.3} overlap={:.3} align={:.2} yaw={:.2} sharp={:.3} flips={:.2} H={:.2} gyre={:.2} cruise={:.2} evade={:.2} v={:.4} score={:.2}",
             s.mean_nn,
-            s.min_nn,
+            s.mean_nnd_bl,
+            s.min_nnd_bl,
             s.closest,
             s.graze_frac,
             s.overlap_frac,
             s.align,
+            s.mean_abs_yaw,
+            s.sharp_frac,
             s.yaw_flips,
             s.cell_entropy,
             s.gyre_align,
             s.cruise_ratio,
             s.evade_frac,
             s.mean_speed,
-            score(&s)
+            score(&s, &LIFE)
         );
         assert!(s.mean_nn > 0.11, "mean nn too small {}", s.mean_nn);
         assert!(s.mean_nn < 0.24, "too shy mean {}", s.mean_nn);
@@ -1668,6 +2036,64 @@ mod tests {
     }
 
     #[test]
+    fn wall_paths_curve_instead_of_rail() {
+        let mut inst = spawn_with(3, 1);
+        inst[0].ci = 12; // saweel：细长游动，用来测贴边而不是悬浮
+        inst[0].x = 0.12;
+        inst[0].y = 0.35;
+        inst[0].rot = -std::f64::consts::FRAC_PI_2;
+        inst[0].speed = 0.030;
+        let scratches = vec![Vec::new(); 1];
+        let dt = 1.0 / 60.0;
+        let mut pts = Vec::new();
+        for step in 0..(8.0 / dt) as usize {
+            advance_morph(&mut inst, dt);
+            integrate_with(
+                &mut inst,
+                &scratches,
+                step as f64 * dt,
+                dt,
+                None,
+                (1920.0, 1080.0),
+                true,
+                &LIFE,
+            );
+            if step % 4 == 0 {
+                pts.push((inst[0].x, inst[0].y));
+            }
+        }
+        let mut sharp = 0usize;
+        for i in 2..pts.len() {
+            let (x0, y0) = pts[i - 2];
+            let (x1, y1) = pts[i - 1];
+            let (x2, y2) = pts[i];
+            let ax = x1 - x0;
+            let ay = y1 - y0;
+            let bx = x2 - x1;
+            let by = y2 - y1;
+            let na = (ax * ax + ay * ay).sqrt();
+            let nb = (bx * bx + by * by).sqrt();
+            if na < 1.2e-3 || nb < 1.2e-3 {
+                continue;
+            }
+            let dot = (ax * bx + ay * by) / (na * nb);
+            if dot < 0.20 {
+                sharp += 1;
+            }
+        }
+        assert!(
+            sharp < 3,
+            "path has {sharp} near-right-angle corners (unbiological wall slide)"
+        );
+        let x_min = pts.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
+        let x_max = pts.iter().map(|p| p.0).fold(f64::NEG_INFINITY, f64::max);
+        assert!(
+            x_max - x_min > 0.06,
+            "stayed on a vertical rail x=[{x_min:.3},{x_max:.3}]"
+        );
+    }
+
+    #[test]
     fn headon_yields_and_turns() {
         let (closest, final_d, turned) = simulate_headon(&LIFE);
         println!("headon closest={closest:.3} final={final_d:.3} turned={turned:.2}");
@@ -1678,12 +2104,247 @@ mod tests {
         assert!(turned < 4.2, "spun out {turned}");
     }
 
-    fn eval_life(p: &LifeParams) -> f64 {
-        let mut acc = 0.0;
-        for seed in [3u32, 11] {
-            acc += score(&simulate_school(seed, 17, 8.0, p));
+    #[test]
+    fn overlap_pushes_apart() {
+        let mut inst = spawn_with(3, 2);
+        inst[0].ci = 3;
+        inst[1].ci = 3;
+        let g = crate::gait::gait(3);
+        for c in &mut inst {
+            c.omega = g.hz * std::f64::consts::TAU;
+            c.speed = g.cruise;
+            c.face = super::species_face(3, 0.0);
         }
-        let (closest, final_d, turned) = simulate_headon(p);
+        inst[0].x = 0.50;
+        inst[0].y = 0.50;
+        inst[0].rot = 0.0;
+        inst[0].vx = g.cruise;
+        inst[0].vy = 0.0;
+        inst[1].x = 0.508;
+        inst[1].y = 0.50;
+        inst[1].rot = std::f64::consts::PI;
+        inst[1].vx = -g.cruise;
+        inst[1].vy = 0.0;
+        let d0 = (inst[0].x - inst[1].x).hypot(inst[0].y - inst[1].y);
+        let scratches = vec![Vec::new(); 2];
+        let dt = 1.0 / 60.0;
+        for step in 0..90 {
+            advance_morph(&mut inst, dt);
+            integrate_with(
+                &mut inst,
+                &scratches,
+                step as f64 * dt,
+                dt,
+                None,
+                (1920.0, 1080.0),
+                true,
+                &LIFE,
+            );
+        }
+        let d1 = (inst[0].x - inst[1].x).hypot(inst[0].y - inst[1].y);
+        println!("overlap d0={d0:.4} d1={d1:.4}");
+        assert!(d0 < 0.02, "fixture not overlapping d0={d0}");
+        assert!(d1 > 0.055, "jellies stayed stacked d1={d1}");
+    }
+
+    #[test]
+    fn life_score_snapshot() {
+        let mix = simulate_school(7, 17, 8.0, &LIFE);
+        let mix_sc = score(&mix, &LIFE);
+        println!(
+            "mix score={mix_sc:.3} nnd={:.2}BL min={:.2} overlap={:.3} yaw={:.2} polar={:.2} v={:.2}BL/s",
+            mix.mean_nnd_bl,
+            mix.min_nnd_bl,
+            mix.overlap_frac,
+            mix.mean_abs_yaw,
+            mix.polar,
+            mix.mean_speed_bl
+        );
+        println!("id\tspec\tnnd\tyaw\tpolar\tv\tlive");
+        let blind = [0usize, 1, 2, 7, 12, 14, 15];
+        for ci in 0..17 {
+            let s = simulate_species(7, ci, 8, 6.0, &LIFE);
+            let sc = score_species(&s, ci, &LIFE);
+            let live = s.mean_speed_bl > 0.04 && (s.mean_abs_yaw > 1e-4 || !LifeParams::heading_trainable(ci));
+            println!(
+                "{}\t{:.3}\t{:.2}\t{:.2}\t{:.2}\t{:.2}\t{}",
+                SPECIES[ci].id,
+                sc,
+                s.mean_nnd_bl,
+                s.mean_abs_yaw,
+                s.polar,
+                s.mean_speed_bl,
+                if live { "y" } else { "n" }
+            );
+            if blind.contains(&ci) {
+                assert!(
+                    s.mean_speed_bl > 0.04,
+                    "{} still speed-blind {:.3}",
+                    SPECIES[ci].id,
+                    s.mean_speed_bl
+                );
+                assert!(
+                    s.mean_abs_yaw > 1e-4,
+                    "{} still yaw-blind {:.4}",
+                    SPECIES[ci].id,
+                    s.mean_abs_yaw
+                );
+            }
+        }
+        let seed = 20260817u32;
+        let eval = |p: &LifeParams| score_species(&simulate_species(seed, 14, 8, 5.0, p), 14, p);
+        let parent_sc = eval(&LIFE);
+        let search = SpeciesSearch {
+            lock_space: true,
+            align_only: true,
+        };
+        let (cand, _, _) = evolve_species_cfg(LIFE, 14, 6, seed, 0.20, search, eval);
+        let cand_sc = score_species(&simulate_species(seed.wrapping_add(1), 14, 8, 6.0, &cand), 14, &cand);
+        println!(
+            "shrimp CMA parent={parent_sc:.3} cand={cand_sc:.3} slip {:.3}->{:.3} zone {:.3}->{:.3} space {:.3}->{:.3} yaw {:.3}->{:.3}",
+            LIFE.kinds[14].slip,
+            cand.kinds[14].slip,
+            LIFE.kinds[14].zone,
+            cand.kinds[14].zone,
+            LIFE.kinds[14].space,
+            cand.kinds[14].space,
+            LIFE.kinds[14].yaw,
+            cand.kinds[14].yaw
+        );
+        assert!(
+            (cand.kinds[14].space - LIFE.kinds[14].space).abs() < 1e-9,
+            "shrimp align-only moved space"
+        );
+        assert!(
+            (cand.kinds[14].yaw - LIFE.kinds[14].yaw).abs() < 1e-9,
+            "shrimp align-only moved yaw"
+        );
+        assert!(
+            (cand.kinds[14].pace - LIFE.kinds[14].pace).abs() < 1e-9,
+            "shrimp align-only moved pace"
+        );
+        assert!(
+            mix.mean_abs_yaw > 1e-4 && mix.mean_speed_bl > 0.04,
+            "mixed school kinematics still dropped"
+        );
+        assert!(mix_sc > 4.5, "mixed school lifeless {mix_sc:.3}");
+    }
+
+    #[test]
+    fn swimmer_kinematics_are_recorded() {
+        for ci in [0usize, 12, 14] {
+            let s = simulate_species(7, ci, 8, 6.0, &LIFE);
+            let id = SPECIES[ci].id;
+            assert!(
+                s.mean_abs_yaw > 1e-4,
+                "{id} yaw dropped ({:.4})",
+                s.mean_abs_yaw
+            );
+            assert!(
+                s.mean_speed_bl > 0.04,
+                "{id} speed_bl=0 ({:.3})",
+                s.mean_speed_bl
+            );
+            assert!(
+                s.kinds[ci].speed_bl > 0.04,
+                "{id} kind speed_bl={:.3}",
+                s.kinds[ci].speed_bl
+            );
+        }
+    }
+
+    #[test]
+    fn pace_scales_travel_speed() {
+        let mut slow = LIFE;
+        let mut fast = LIFE;
+        slow.kinds[14].pace = 0.70;
+        fast.kinds[14].pace = 2.40;
+        let a = simulate_species(9, 14, 8, 6.0, &slow);
+        let b = simulate_species(9, 14, 8, 6.0, &fast);
+        assert!(
+            b.mean_speed_bl > a.mean_speed_bl * 1.25,
+            "pace did not speed shrimp {:.3} vs {:.3}",
+            b.mean_speed_bl,
+            a.mean_speed_bl
+        );
+    }
+
+    #[test]
+    fn shrimp_slip_raises_polar() {
+        let mut off = LIFE;
+        off.kinds[14].slip = 0.08;
+        off.kinds[14].zone = 1.60;
+        let mut on = LIFE;
+        on.kinds[14].slip = 0.70;
+        on.kinds[14].zone = 2.20;
+        let a = simulate_species(11, 14, 8, 16.0, &off);
+        let b = simulate_species(11, 14, 8, 16.0, &on);
+        let trained = simulate_species(11, 14, 8, 24.0, &LIFE);
+        println!(
+            "shrimp polar local-off={:.3} align={:.3} trained={:.3} nnd {:.2}->{:.2}->{:.2}",
+            a.polar, b.polar, trained.polar, a.mean_nnd_bl, b.mean_nnd_bl, trained.mean_nnd_bl
+        );
+        assert!(
+            b.polar > 0.70,
+            "steady shrimp polar still capped {:.3}",
+            b.polar
+        );
+        assert!(
+            b.polar > a.polar + 0.08,
+            "local zone did not raise polar {:.3} vs {:.3}",
+            b.polar,
+            a.polar
+        );
+        assert!(
+            trained.polar > 0.68,
+            "written shrimp LIFE polar too low {:.3}",
+            trained.polar
+        );
+        assert!(
+            trained.mean_nnd_bl < 1.50,
+            "written shrimp nnd too open {:.2}",
+            trained.mean_nnd_bl
+        );
+    }
+
+    #[test]
+    fn parse_life_accepts_six_param_rows() {
+        let mut src = format!(
+            "LifeParams {{\n    body: {:.3}, near: {:.3}, far: {:.3}, push: {:.3}, far_w: {:.3}, gyre: {:.3}, slide: {:.3},\n    kinds: [\n",
+            LIFE.body, LIFE.near, LIFE.far, LIFE.push, LIFE.far_w, LIFE.gyre, LIFE.slide
+        );
+        for (k, sp) in LIFE.kinds.iter().zip(SPECIES.iter()) {
+            src.push_str(&format!(
+                "        KindLife {{ space: {:.3}, yaw: {:.3}, brake: {:.3}, slip: {:.3}, wander: {:.3}, shy: {:.3} }}, // {}\n",
+                k.space, k.yaw, k.brake, k.slip, k.wander, k.shy, sp.id
+            ));
+        }
+        src.push_str("    ],\n}\n");
+        let p = parse_life_rs(&src).expect("old 6-param layout");
+        assert!(
+            (p.kinds[14].pace - 1.0).abs() < 1e-9,
+            "missing pace should stay 1, got {}",
+            p.kinds[14].pace
+        );
+        assert!(
+            (p.kinds[14].zone - LIFE.kinds[14].zone).abs() < 1e-9,
+            "missing zone should stay baked, got {}",
+            p.kinds[14].zone
+        );
+        assert!((p.kinds[0].space - LIFE.kinds[0].space).abs() < 1e-3);
+        assert!((p.kinds[14].yaw - LIFE.kinds[14].yaw).abs() < 1e-3);
+    }
+
+    fn eval_life(p: &LifeParams) -> f64 {
+        let (acc, (closest, final_d, turned)) = std::thread::scope(|scope| {
+            let a = scope.spawn(|| score(&simulate_school(3, 17, 8.0, p), p));
+            let b = scope.spawn(|| score(&simulate_school(11, 17, 8.0, p), p));
+            let h = scope.spawn(|| simulate_headon(p));
+            (
+                a.join().expect("school-a") + b.join().expect("school-b"),
+                h.join().expect("headon"),
+            )
+        });
         let head = (closest / 0.07).tanh() * (1.0 - ((closest - 0.09).abs() / 0.12).clamp(0.0, 1.0))
             + (final_d / 0.10).tanh() * 0.4
             + ((turned - 0.20) / 0.7).clamp(0.0, 1.0)
@@ -1726,7 +2387,34 @@ mod tests {
     }
 
     fn dump_school_paths(seed: u32, seconds: f64, life: &LifeParams, path: &std::path::Path) {
-        let mut inst = spawn_with(seed, 17);
+        dump_paths(seed, 17, None, seconds, life, path);
+    }
+
+    fn dump_paths(
+        seed: u32,
+        count: usize,
+        as_ci: Option<usize>,
+        seconds: f64,
+        life: &LifeParams,
+        path: &std::path::Path,
+    ) {
+        let mut inst = spawn_with(seed, count);
+        if let Some(ci) = as_ci {
+            let g = crate::gait::gait(ci);
+            let pace = species_life(ci, life).pace;
+            let omega = g.hz * std::f64::consts::TAU;
+            let speed = g.cruise * pace;
+            let face = species_face(ci, 0.0);
+            for c in &mut inst {
+                c.ci = ci;
+                c.omega = omega;
+                c.speed = speed;
+                let ang = c.rot;
+                c.vx = speed * ang.cos();
+                c.vy = -speed * ang.sin();
+                c.face = face;
+            }
+        }
         let scratches = vec![Vec::new(); inst.len()];
         let dt = 1.0 / 60.0;
         let nsteps = (seconds / dt) as usize;
@@ -1765,27 +2453,114 @@ mod tests {
     }
 
     fn write_life_rs(p: &LifeParams) -> String {
-        let names = [
-            "jet", "ciliary", "metachronal", "undulate", "flap", "spin", "hover", "helix",
-        ];
         let mut s = format!(
             "LifeParams {{\n    body: {:.3}, near: {:.3}, far: {:.3}, push: {:.3}, far_w: {:.3}, gyre: {:.3}, slide: {:.3},\n    kinds: [\n",
             p.body, p.near, p.far, p.push, p.far_w, p.gyre, p.slide
         );
-        for (k, name) in p.kinds.iter().zip(names) {
+        for (k, sp) in p.kinds.iter().zip(SPECIES.iter()) {
             s.push_str(&format!(
-                "        KindLife {{ space: {:.3}, yaw: {:.3}, brake: {:.3}, slip: {:.3}, wander: {:.3}, shy: {:.3} }}, // {name}\n",
-                k.space, k.yaw, k.brake, k.slip, k.wander, k.shy
+                "        KindLife {{ space: {:.3}, yaw: {:.3}, brake: {:.3}, slip: {:.3}, wander: {:.3}, shy: {:.3}, pace: {:.3}, zone: {:.3} }}, // {}\n",
+                k.space, k.yaw, k.brake, k.slip, k.wander, k.shy, k.pace, k.zone, sp.id
             ));
         }
         s.push_str("    ],\n}\n");
         s
     }
 
-    /// 观察 → 记录 → 演化 → 再观察。默认 24 小时，可用 OBSERVE_HOURS 覆盖。
+    fn parse_life_rs(src: &str) -> Option<LifeParams> {
+        let mut nums = Vec::new();
+        let mut cur = String::new();
+        let flush = |cur: &mut String, nums: &mut Vec<f64>| {
+            if cur.is_empty() {
+                return;
+            }
+            if let Ok(v) = cur.parse::<f64>() {
+                nums.push(v);
+            }
+            cur.clear();
+        };
+        for line in src.lines() {
+            let line = line.split("//").next().unwrap_or("");
+            for c in line.chars() {
+                if c.is_ascii_digit() || c == '.' || (cur.is_empty() && (c == '-' || c == '+')) {
+                    cur.push(c);
+                } else {
+                    flush(&mut cur, &mut nums);
+                }
+            }
+            flush(&mut cur, &mut nums);
+        }
+        let n_global = 7;
+        let n_kind_new = LifeParams::KIND_DIM;
+        let n_v8 = n_global + 17 * 8;
+        let n_v7 = n_global + 17 * 7;
+        let n_v6 = n_global + 17 * 6;
+        if nums.len() < n_v6 {
+            return None;
+        }
+        let n_kind = if nums.len() >= n_v8 {
+            8
+        } else if nums.len() >= n_v7 {
+            7
+        } else {
+            6
+        };
+        let mut p = LIFE;
+        for i in 0..n_global {
+            p.set_param(i, nums[i]);
+        }
+        for ci in 0..17 {
+            for k in 0..n_kind {
+                p.set_param(
+                    n_global + ci * n_kind_new + k,
+                    nums[n_global + ci * n_kind + k],
+                );
+            }
+        }
+        Some(p.clamp())
+    }
+
+    /// 观察 → 记录 → 演化 → 再观察。
+    /// OBSERVE_CI=14|shrimp 只训列出的种；不设则仍 17 种轮转。
+    /// OBSERVE_LOCK_SPACE=1 冻结 space；OBSERVE_ALIGN_ONLY=1 只动 slip/zone（不对 yaw）。
+    /// 默认不加载顶满 space 的 best.rs（OBSERVE_LOAD_BEST=1 才合并未触顶的行）。
     #[test]
     #[ignore]
     fn observe_record_optimize_loop() {
+        fn env_flag(key: &str) -> bool {
+            matches!(
+                std::env::var(key).ok().as_deref().map(str::trim),
+                Some("1") | Some("true") | Some("yes") | Some("TRUE")
+            )
+        }
+        fn parse_roster() -> Vec<usize> {
+            let raw = std::env::var("OBSERVE_CI").unwrap_or_default();
+            let raw = raw.trim();
+            if raw.is_empty() {
+                return (0..LifeParams::N_SPECIES).collect();
+            }
+            let mut out = Vec::new();
+            for part in raw.split(',') {
+                let p = part.trim();
+                if p.eq_ignore_ascii_case("shrimp") {
+                    if !out.contains(&14) {
+                        out.push(14);
+                    }
+                    continue;
+                }
+                if let Ok(i) = p.parse::<usize>() {
+                    if i < LifeParams::N_SPECIES && !out.contains(&i) {
+                        out.push(i);
+                    }
+                }
+            }
+            if out.is_empty() {
+                vec![14]
+            } else {
+                out
+            }
+        }
+
         let hours: f64 = std::env::var("OBSERVE_HOURS")
             .ok()
             .and_then(|s| s.parse::<f64>().ok())
@@ -1795,6 +2570,22 @@ mod tests {
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(16);
+        let eval_s: f64 = std::env::var("OBSERVE_EVAL")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(16.0);
+        let eval_s = eval_s.clamp(3.0, 24.0);
+        let roster = parse_roster();
+        let search = SpeciesSearch {
+            lock_space: env_flag("OBSERVE_LOCK_SPACE"),
+            align_only: env_flag("OBSERVE_ALIGN_ONLY"),
+        };
+        let sigma0: f64 = std::env::var("OBSERVE_SIGMA")
+            .ok()
+            .and_then(|s| s.parse::<f64>().ok())
+            .unwrap_or(CMA_SIGMA0)
+            .clamp(0.12, 0.72);
+        let single = roster.len() == 1;
         let dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.cache/life-obs");
         let _ = std::fs::create_dir_all(&dir);
         let journal = dir.join("journal.tsv");
@@ -1806,49 +2597,173 @@ mod tests {
         if jf.metadata().map(|m| m.len()).unwrap_or(1) == 0 {
             let _ = writeln!(
                 jf,
-                "cycle\telapsed_h\tscore\tmean_nn\tmin_nn\tclosest\tgraze\talign\tcruise\tevade\theadon_d\tturned"
+                "cycle\telapsed_h\tscore\tmean_nn\tmin_nn\tclosest\tgraze\talign\tcruise\tevade\theadon_d\tturned\tnnd_bl\tyaw\tspecies\tspec_sc\tpolar\tspeed_bl"
             );
         }
         let t0 = std::time::Instant::now();
         let mut parent = LIFE;
+        if env_flag("OBSERVE_LOAD_BEST") {
+            if let Some(loaded) = std::fs::read_to_string(dir.join("best.rs"))
+                .ok()
+                .and_then(|s| parse_life_rs(&s))
+            {
+                for &ci in &roster {
+                    if loaded.kinds[ci].space <= species_space_cap(ci) {
+                        parent.kinds[ci] = loaded.kinds[ci];
+                    }
+                }
+            }
+        }
+        if let Some(v) = std::env::var("OBSERVE_SLIP")
+            .ok()
+            .and_then(|s| s.parse::<f64>().ok())
+        {
+            for &ci in &roster {
+                parent.kinds[ci].slip = v.clamp(0.05, 2.40);
+            }
+        }
+        if let Some(v) = std::env::var("OBSERVE_ZONE")
+            .ok()
+            .and_then(|s| s.parse::<f64>().ok())
+        {
+            for &ci in &roster {
+                parent.kinds[ci].zone = v.clamp(1.60, 2.80);
+            }
+        }
+        let mut champ_sc = [f64::NEG_INFINITY; LifeParams::N_SPECIES];
+        let mut cmas: Vec<Option<SpeciesCma>> = (0..LifeParams::N_SPECIES).map(|_| None).collect();
         let mut cycle = 0u32;
-        println!("observe loop hours={hours} gens/cycle={gens} dir={}", dir.display());
+        println!(
+            "observe loop hours={hours} gens/cycle={gens} eval={eval_s:.0}s search=CMA-ES sigma0={sigma0:.2} roster={roster:?} lock_space={} align_only={} dir={}",
+            search.lock_space,
+            search.align_only,
+            dir.display()
+        );
         while t0.elapsed().as_secs_f64() < hours * 3600.0 {
-            let (school, (closest, _final_d, turned)) = std::thread::scope(|scope| {
-                let school = scope.spawn(|| simulate_school(7, 17, 12.0, &parent));
-                let head = scope.spawn(|| simulate_headon(&parent));
+            let ci = roster[cycle as usize % roster.len()];
+            let id = SPECIES[ci].id;
+            let spec_eval = if ci == 14 {
+                (eval_s * 1.5).clamp(3.0, 24.0)
+            } else {
+                eval_s
+            };
+            let spec = simulate_species(7, ci, 8, spec_eval, &parent);
+            let spec_sc = score_species(&spec, ci, &parent);
+            let (sc, mean_nn, min_nn, closest, graze, align, cruise, evade, turned) = if single {
                 (
-                    school.join().expect("school"),
-                    head.join().expect("headon"),
+                    spec_sc,
+                    spec.mean_nn,
+                    spec.min_nn,
+                    spec.closest,
+                    spec.graze_frac,
+                    spec.align,
+                    spec.cruise_ratio,
+                    spec.evade_frac,
+                    0.0,
                 )
-            });
-            let sc = score(&school);
+            } else {
+                let (school, (closest, _final_d, turned)) = std::thread::scope(|scope| {
+                    let school = scope.spawn(|| simulate_school(7, 17, eval_s + 2.0, &parent));
+                    let head = scope.spawn(|| simulate_headon(&parent));
+                    (
+                        school.join().expect("school"),
+                        head.join().expect("headon"),
+                    )
+                });
+                let sc = score(&school, &parent);
+                (
+                    sc,
+                    school.mean_nn,
+                    school.min_nn,
+                    closest,
+                    school.graze_frac,
+                    school.align,
+                    school.cruise_ratio,
+                    school.evade_frac,
+                    turned,
+                )
+            };
+            if spec_sc > champ_sc[ci] {
+                champ_sc[ci] = spec_sc;
+            }
             let elapsed_h = t0.elapsed().as_secs_f64() / 3600.0;
+            let sigma_now = cmas[ci].as_ref().map(|c| c.sigma).unwrap_or(0.20);
             let _ = writeln!(
                 jf,
-                "{cycle}\t{elapsed_h:.4}\t{sc:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.3}\t{:.2}\t{:.2}\t{:.2}\t{closest:.3}\t{turned:.2}",
-                school.mean_nn,
-                school.min_nn,
-                school.closest,
-                school.graze_frac,
-                school.align,
-                school.cruise_ratio,
-                school.evade_frac
+                "{cycle}\t{elapsed_h:.4}\t{sc:.3}\t{mean_nn:.3}\t{min_nn:.3}\t{closest:.3}\t{graze:.3}\t{align:.2}\t{cruise:.2}\t{evade:.2}\t{closest:.3}\t{turned:.2}\t{:.2}\t{:.2}\t{id}\t{spec_sc:.3}\t{:.2}\t{:.2}",
+                spec.mean_nnd_bl,
+                spec.mean_abs_yaw,
+                spec.polar,
+                spec.mean_speed_bl
             );
             let _ = jf.flush();
             println!(
-                "cycle {cycle} t={elapsed_h:.3}h score={sc:.2} nn={:.3} close={:.3} graze={:.3} cruise={:.2} headon={closest:.3}/{turned:.2}",
-                school.mean_nn, school.closest, school.graze_frac, school.cruise_ratio
+                "cycle {cycle} t={elapsed_h:.3}h species={id} spec={spec_sc:.2} champ={:.2} mix={sc:.2} sigma={:.3} nnd={:.2}BL yaw={:.2} polar={:.2} v={:.2}BL/s headon={closest:.3}/{turned:.2}",
+                champ_sc[ci],
+                sigma_now,
+                spec.mean_nnd_bl,
+                spec.mean_abs_yaw,
+                spec.polar,
+                spec.mean_speed_bl
             );
-            if cycle % 8 == 0 {
-                dump_school_paths(7, 10.0, &parent, &dir.join(format!("paths-{cycle:04}.csv")));
+            let dump_every = if single { 2 } else { 8 };
+            if cycle % dump_every == 0 {
+                let dump_life = parent;
+                let dump_path = dir.join(format!("paths-{cycle:04}.csv"));
+                let dump_seed = 7u32.wrapping_add(cycle);
+                std::thread::spawn(move || {
+                    if single {
+                        dump_paths(dump_seed, 8, Some(ci), 16.0, &dump_life, &dump_path);
+                    } else {
+                        dump_school_paths(dump_seed, 16.0, &dump_life, &dump_path);
+                    }
+                });
                 if let Ok(mut f) = std::fs::File::create(dir.join("best.rs")) {
                     let _ = write!(f, "{}", write_life_rs(&parent));
                 }
             }
             let seed = 20260815u32.wrapping_add(cycle.wrapping_mul(17));
-            let (best, _) = evolve_from(parent, gens, seed, eval_life);
-            parent = best;
+            let eval = |p: &LifeParams| {
+                score_species(&simulate_species(seed, ci, 8, spec_eval, p), ci, p)
+            };
+            if cmas[ci].is_none() {
+                cmas[ci] = Some(SpeciesCma::from_life(&parent, ci, search, sigma0));
+            } else if cmas[ci].as_ref().is_some_and(|c| c.sigma <= 0.05) {
+                println!(
+                    "CMA restart {id} sigma collapsed; inflate to {:.2} (restarts were {})",
+                    (sigma0 * 1.15).min(0.65),
+                    cmas[ci].as_ref().map(|c| c.restarts).unwrap_or(0)
+                );
+                cmas[ci] = Some(SpeciesCma::from_life(
+                    &parent,
+                    ci,
+                    search,
+                    (sigma0 * 1.15).min(0.65),
+                ));
+            }
+            let (cand, _) = cmas[ci]
+                .as_mut()
+                .expect("cma")
+                .run(parent, ci, gens, seed, eval);
+            let cand_sc = score_species(
+                &simulate_species(seed.wrapping_add(1), ci, 8, spec_eval + 2.0, &cand),
+                ci,
+                &cand,
+            );
+            let sigma_ci = cmas[ci].as_ref().map(|c| c.sigma).unwrap_or(0.0);
+            if cand_sc > champ_sc[ci] + 1e-4 {
+                println!(
+                    "new champion {id} {:.3} -> {cand_sc:.3} sigma={:.3}",
+                    champ_sc[ci], sigma_ci
+                );
+                parent.kinds[ci] = cand.kinds[ci];
+                champ_sc[ci] = cand_sc;
+            } else {
+                println!(
+                    "keep champion {id} {:.3} cand={cand_sc:.3} sigma={:.3}",
+                    champ_sc[ci], sigma_ci
+                );
+            }
             cycle += 1;
         }
         if let Ok(mut f) = std::fs::File::create(dir.join("best.rs")) {
