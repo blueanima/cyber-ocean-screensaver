@@ -281,23 +281,23 @@ pub const LIFE: LifeParams = LifeParams {
     gyre: 0.012,
     slide: 0.102,
     kinds: [
-        KindLife { space: 0.851, yaw: 0.272, brake: 0.082, slip: 0.388, wander: 0.056, shy: 0.295, pace: 1.000, zone: 2.200 }, // fucan
-        KindLife { space: 0.886, yaw: 0.302, brake: 0.080, slip: 0.391, wander: 0.057, shy: 0.320, pace: 1.000, zone: 2.200 }, // youyan
-        KindLife { space: 1.523, yaw: 0.779, brake: 0.049, slip: 0.243, wander: 0.055, shy: 0.323, pace: 1.000, zone: 2.200 }, // jichong
+        KindLife { space: 0.851, yaw: 0.144, brake: 0.263, slip: 0.147, wander: 0.086, shy: 0.543, pace: 0.700, zone: 1.600 }, // fucan
+        KindLife { space: 0.886, yaw: 0.147, brake: 0.120, slip: 0.084, wander: 0.095, shy: 1.250, pace: 0.700, zone: 1.600 }, // youyan
+        KindLife { space: 1.523, yaw: 0.780, brake: 0.168, slip: 1.805, wander: 0.016, shy: 0.851, pace: 2.345, zone: 1.926 }, // jichong
         KindLife { space: 1.285, yaw: 0.245, brake: 0.109, slip: 0.321, wander: 0.039, shy: 0.354, pace: 1.000, zone: 2.200 }, // jelly
         KindLife { space: 1.417, yaw: 0.248, brake: 0.106, slip: 0.320, wander: 0.039, shy: 0.361, pace: 1.000, zone: 2.200 }, // nebula
-        KindLife { space: 1.312, yaw: 0.241, brake: 0.101, slip: 0.301, wander: 0.038, shy: 0.372, pace: 1.000, zone: 2.200 }, // lantern
-        KindLife { space: 0.838, yaw: 0.142, brake: 0.342, slip: 0.480, wander: 0.029, shy: 0.462, pace: 1.000, zone: 2.200 }, // feather
-        KindLife { space: 1.304, yaw: 0.774, brake: 0.052, slip: 0.247, wander: 0.055, shy: 0.326, pace: 1.000, zone: 2.200 }, // tentacle
-        KindLife { space: 0.801, yaw: 0.099, brake: 0.031, slip: 0.554, wander: 0.019, shy: 0.405, pace: 1.000, zone: 2.200 }, // flower6
-        KindLife { space: 0.801, yaw: 0.099, brake: 0.031, slip: 0.554, wander: 0.019, shy: 0.405, pace: 1.000, zone: 2.200 }, // wheel
-        KindLife { space: 0.800, yaw: 0.158, brake: 0.081, slip: 0.138, wander: 0.036, shy: 0.302, pace: 1.000, zone: 2.200 }, // spiral
-        KindLife { space: 0.801, yaw: 0.299, brake: 0.050, slip: 0.419, wander: 0.028, shy: 0.436, pace: 1.000, zone: 2.200 }, // comb
-        KindLife { space: 1.466, yaw: 0.778, brake: 0.049, slip: 0.250, wander: 0.056, shy: 0.322, pace: 1.000, zone: 2.200 }, // saweel
-        KindLife { space: 0.801, yaw: 0.099, brake: 0.031, slip: 0.554, wander: 0.019, shy: 0.405, pace: 1.000, zone: 2.200 }, // star8
-        KindLife { space: 0.800, yaw: 0.321, brake: 0.044, slip: 0.174, wander: 0.056, shy: 0.280, pace: 1.000, zone: 1.614 }, // shrimp
-        KindLife { space: 2.100, yaw: 0.774, brake: 0.049, slip: 0.249, wander: 0.057, shy: 0.302, pace: 1.000, zone: 2.200 }, // vortex
-        KindLife { space: 1.139, yaw: 0.253, brake: 0.090, slip: 0.241, wander: 0.052, shy: 0.371, pace: 1.000, zone: 2.200 }, // angel
+        KindLife { space: 1.312, yaw: 0.623, brake: 0.080, slip: 0.846, wander: 0.100, shy: 0.634, pace: 0.700, zone: 2.094 }, // lantern
+        KindLife { space: 0.838, yaw: 0.080, brake: 0.277, slip: 1.714, wander: 0.078, shy: 1.002, pace: 2.800, zone: 2.389 }, // feather
+        KindLife { space: 1.304, yaw: 0.080, brake: 0.020, slip: 1.879, wander: 0.057, shy: 1.250, pace: 1.305, zone: 1.600 }, // tentacle
+        KindLife { space: 0.801, yaw: 0.099, brake: 0.454, slip: 0.429, wander: 0.019, shy: 0.507, pace: 0.700, zone: 1.972 }, // flower6
+        KindLife { space: 0.801, yaw: 0.099, brake: 0.033, slip: 2.400, wander: 0.019, shy: 0.280, pace: 0.700, zone: 2.692 }, // wheel
+        KindLife { space: 0.800, yaw: 0.165, brake: 0.030, slip: 0.050, wander: 0.066, shy: 0.357, pace: 0.700, zone: 1.637 }, // spiral
+        KindLife { space: 0.801, yaw: 0.269, brake: 0.338, slip: 0.088, wander: 0.056, shy: 0.502, pace: 1.038, zone: 1.600 }, // comb
+        KindLife { space: 1.466, yaw: 0.290, brake: 0.177, slip: 0.065, wander: 0.015, shy: 0.725, pace: 1.456, zone: 1.625 }, // saweel
+        KindLife { space: 0.801, yaw: 0.099, brake: 0.023, slip: 0.213, wander: 0.019, shy: 1.250, pace: 1.877, zone: 1.603 }, // star8
+        KindLife { space: 0.800, yaw: 0.321, brake: 0.044, slip: 0.888, wander: 0.056, shy: 0.280, pace: 1.000, zone: 1.955 }, // shrimp
+        KindLife { space: 2.100, yaw: 0.265, brake: 0.041, slip: 2.035, wander: 0.180, shy: 1.250, pace: 1.192, zone: 2.427 }, // vortex
+        KindLife { space: 1.139, yaw: 0.745, brake: 0.159, slip: 0.161, wander: 0.062, shy: 0.763, pace: 0.700, zone: 1.729 }, // angel
     ],
 };
 
@@ -468,6 +468,15 @@ pub fn species_space_cap(ci: usize) -> f64 {
 }
 
 #[cfg(test)]
+/// 喷水种 pace 顶到 2.8 会晃伞、偏轴；搜索盒单独收。
+pub fn species_pace_cap(ci: usize) -> f64 {
+    match ci {
+        3 | 4 | 5 => 1.20,
+        _ => 2.80,
+    }
+}
+
+#[cfg(test)]
 fn space_hits_cap(space: f64, cap: f64) -> bool {
     space >= cap - 0.02
 }
@@ -478,6 +487,29 @@ fn space_bound_tax(space: f64, cap: f64) -> f64 {
         1.0
     } else {
         0.0
+    }
+}
+
+#[cfg(test)]
+/// 磷虾极化不够扣；松散种过对齐扣。辐射种 `w_polar=0` 不进这项。
+fn polar_gate_tax(k: &KindBio, t: &KindTarget, ci: usize) -> f64 {
+    if k.n < 4.0 || t.w_polar <= 0.0 {
+        return 0.0;
+    }
+    if ci == 14 {
+        let floor = t.polar.max(0.72);
+        if k.polar >= floor {
+            0.0
+        } else {
+            ((floor - k.polar) / 0.22).clamp(0.0, 1.0)
+        }
+    } else {
+        let ceil = t.polar + 0.15;
+        if k.polar <= ceil {
+            0.0
+        } else {
+            ((k.polar - ceil) / 0.28).clamp(0.0, 1.0)
+        }
     }
 }
 
@@ -537,7 +569,7 @@ pub fn score_species(s: &SchoolStats, ci: usize, life: &LifeParams) -> f64 {
             nnd_bl: s.mean_nnd_bl,
             yaw: s.mean_abs_yaw,
             polar: s.polar,
-            have_polar: t.w_polar > 0.0 && s.polar > 0.0,
+            have_polar: t.w_polar > 0.0,
             speed_bl: s.mean_speed_bl,
         }
     };
@@ -553,6 +585,7 @@ pub fn score_species(s: &SchoolStats, ci: usize, life: &LifeParams) -> f64 {
     let alive = s.cruise_ratio.clamp(0.0, 1.15).min(1.0);
     3.6 * kind_match(&k, t, space, cap) + 1.4 * pile - 2.6 * crush + 2.0 * overlap + 0.8 * alive
         - 1.8 * space_bound_tax(space, cap)
+        - 2.4 * polar_gate_tax(&k, t, ci)
 }
 
 #[cfg(test)]
@@ -577,7 +610,7 @@ pub fn score(s: &SchoolStats, life: &LifeParams) -> f64 {
         }
         let cap = species_space_cap(i);
         bio += kind_match(k, t, life.kinds[i].space, cap);
-        tax += space_bound_tax(life.kinds[i].space, cap);
+        tax += space_bound_tax(life.kinds[i].space, cap) + 0.45 * polar_gate_tax(k, t, i);
         nw += 1.0;
     }
     let bio = if nw > 0.0 { bio / nw } else { 0.0 };
@@ -683,8 +716,8 @@ impl SpeciesSearch {
                 vec![7]
             };
         }
-        let mut out = Vec::with_capacity(7);
-        for k in 0..7 {
+        let mut out = Vec::with_capacity(LifeParams::KIND_DIM);
+        for k in 0..LifeParams::KIND_DIM {
             if k == 0 && self.lock_space {
                 continue;
             }
@@ -701,6 +734,8 @@ impl SpeciesSearch {
 fn species_kind_bounds(ci: usize, k: usize) -> (f64, f64) {
     if k == 0 {
         (0.50, species_space_cap(ci))
+    } else if k == 6 {
+        (0.70, species_pace_cap(ci))
     } else {
         LifeParams::param_bounds(7 + k)
     }
@@ -868,6 +903,18 @@ impl SpeciesCma {
         self.count = 0;
     }
 
+    /// 评估循环在线加码：步长明显变大时重置协方差，不丢掉当前均值。
+    pub fn inflate_to(&mut self, sigma: f64) {
+        let sigma = sigma.clamp(0.08, CMA_SIGMA_MAX);
+        if sigma > self.sigma * 1.15 {
+            self.reset_cov();
+            self.sigma = sigma;
+            self.sigma0 = sigma;
+            self.stale = 0;
+            self.restarts += 1;
+        }
+    }
+
     fn ipop(&mut self, rng: &mut impl FnMut() -> f64) {
         self.restarts += 1;
         let n = self.m.len();
@@ -895,6 +942,7 @@ impl SpeciesCma {
         }
         p = p.clamp();
         p.kinds[ci].space = p.kinds[ci].space.min(species_space_cap(ci));
+        p.kinds[ci].pace = p.kinds[ci].pace.min(species_pace_cap(ci));
         if !self.dims.contains(&0) {
             p.kinds[ci].space = space0;
         }
@@ -1547,6 +1595,69 @@ fn shrimp_low_yaw_not_better_than_polar() {
 
 #[cfg(test)]
 #[test]
+fn loose_polar_overshoot_is_taxed() {
+    let mut s = SchoolStats {
+        min_nnd_bl: 0.90,
+        overlap_frac: 0.0,
+        cruise_ratio: 0.85,
+        ..SchoolStats::default()
+    };
+    s.kinds[11] = KindBio {
+        n: 32.0,
+        nnd_bl: 3.20,
+        yaw: 0.18,
+        polar: 0.28,
+        have_polar: true,
+        speed_bl: 0.12,
+    };
+    let on_tgt = score_species(&s, 11, &LIFE);
+    s.kinds[11].polar = 0.72;
+    let over = score_species(&s, 11, &LIFE);
+    assert!(
+        on_tgt > over + 0.7,
+        "comb over-align not taxed: on={on_tgt:.3} over={over:.3}"
+    );
+}
+
+#[cfg(test)]
+#[test]
+fn shrimp_polar_floor_is_taxed() {
+    let mut s = SchoolStats {
+        min_nnd_bl: 0.90,
+        overlap_frac: 0.0,
+        cruise_ratio: 0.85,
+        ..SchoolStats::default()
+    };
+    s.kinds[14] = KindBio {
+        n: 32.0,
+        nnd_bl: 1.05,
+        yaw: 0.10,
+        polar: 0.78,
+        have_polar: true,
+        speed_bl: 0.80,
+    };
+    let on_tgt = score_species(&s, 14, &LIFE);
+    s.kinds[14].polar = 0.55;
+    let under = score_species(&s, 14, &LIFE);
+    assert!(
+        on_tgt > under + 1.2,
+        "shrimp polar floor too weak: on={on_tgt:.3} under={under:.3}"
+    );
+}
+
+#[cfg(test)]
+#[test]
+fn jet_pace_search_stays_under_shake() {
+    assert!(species_pace_cap(3) <= 1.20 + 1e-9, "jelly pace cap");
+    assert!(species_pace_cap(4) <= 1.20 + 1e-9, "nebula pace cap");
+    assert!(species_pace_cap(5) <= 1.20 + 1e-9, "lantern pace cap");
+    assert!((species_pace_cap(14) - 2.80).abs() < 1e-9, "shrimp pace");
+    let (lo, hi) = species_kind_bounds(3, 6);
+    assert!((lo - 0.70).abs() < 1e-9 && hi <= 1.20 + 1e-9, "jelly bounds {lo} {hi}");
+}
+
+#[cfg(test)]
+#[test]
 fn cma_align_only_moves_slip_not_yaw() {
     let target = 1.60;
     let eval = |p: &LifeParams| -((p.kinds[14].slip - target).powi(2));
@@ -1618,4 +1729,21 @@ fn cma_ipop_inflates_sigma_on_plateau() {
         "IPOP left sigma collapsed {:.3}",
         cma.sigma
     );
+}
+
+#[cfg(test)]
+#[test]
+fn cma_full_search_includes_zone() {
+    let search = SpeciesSearch {
+        lock_space: true,
+        align_only: false,
+    };
+    let shrimp = search.dims(14);
+    assert!(shrimp.contains(&3), "slip {shrimp:?}");
+    assert!(shrimp.contains(&7), "zone missing {shrimp:?}");
+    assert!(!shrimp.contains(&0), "space should stay locked {shrimp:?}");
+    let flower = search.dims(8);
+    assert!(!flower.contains(&1), "flower yaw {flower:?}");
+    assert!(!flower.contains(&4), "flower wander {flower:?}");
+    assert!(flower.contains(&7), "flower zone {flower:?}");
 }

@@ -1496,7 +1496,7 @@ mod tests {
     use super::*;
     use crate::life::{
         evolve, evolve_species_cfg, score, score_species, species_space_cap, LifeParams,
-        SpeciesCma, SpeciesSearch, CMA_SIGMA0, LIFE,
+        SpeciesCma, SpeciesSearch, CMA_SIGMA0, LIFE, SPECIES_BIO,
     };
     use std::io::Write;
 
@@ -2520,10 +2520,113 @@ mod tests {
         Some(p.clamp())
     }
 
+    fn parse_observe_roster(raw: &str) -> Vec<usize> {
+        let raw = raw.trim();
+        if raw.is_empty()
+            || raw.eq_ignore_ascii_case("all")
+            || raw == "*"
+        {
+            return (0..LifeParams::N_SPECIES).collect();
+        }
+        if raw.eq_ignore_ascii_case("shrimp") {
+            return vec![14];
+        }
+        if raw.eq_ignore_ascii_case("jets") {
+            return vec![3, 4, 5];
+        }
+        if raw.eq_ignore_ascii_case("loose") {
+            return vec![0, 1, 2, 7, 10, 11, 12, 15, 16];
+        }
+        let mut out = Vec::new();
+        for part in raw.split(',') {
+            let p = part.trim();
+            if p.eq_ignore_ascii_case("shrimp") {
+                if !out.contains(&14) {
+                    out.push(14);
+                }
+                continue;
+            }
+            if p.eq_ignore_ascii_case("jets") {
+                for ci in [3usize, 4, 5] {
+                    if !out.contains(&ci) {
+                        out.push(ci);
+                    }
+                }
+                continue;
+            }
+            if p.eq_ignore_ascii_case("loose") {
+                for ci in [0usize, 1, 2, 7, 10, 11, 12, 15, 16] {
+                    if !out.contains(&ci) {
+                        out.push(ci);
+                    }
+                }
+                continue;
+            }
+            if let Ok(i) = p.parse::<usize>() {
+                if i < LifeParams::N_SPECIES && !out.contains(&i) {
+                    out.push(i);
+                }
+            }
+        }
+        if out.is_empty() {
+            vec![14]
+        } else {
+            out
+        }
+    }
+
+    #[test]
+    fn parse_observe_roster_named_groups() {
+        assert_eq!(parse_observe_roster("shrimp"), vec![14]);
+        assert_eq!(parse_observe_roster("jets"), vec![3, 4, 5]);
+        assert_eq!(parse_observe_roster("loose").len(), 9);
+        assert!(!parse_observe_roster("loose").contains(&14));
+        assert!(!parse_observe_roster("loose").contains(&3));
+        assert_eq!(parse_observe_roster("all").len(), 17);
+        assert_eq!(parse_observe_roster("0,14"), vec![0, 14]);
+    }
+
+    fn median3(mut xs: [f64; 3]) -> f64 {
+        xs.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+        xs[1]
+    }
+
+    struct Confirm {
+        score: f64,
+        polar: f64,
+        nnd: f64,
+    }
+
+    fn confirm_species(ci: usize, seconds: f64, life: &LifeParams) -> Confirm {
+        const SEEDS: [u32; 3] = [7, 11, 19];
+        let mut scores = [0.0; 3];
+        let mut polar = [0.0; 3];
+        let mut nnd = [0.0; 3];
+        for (i, seed) in SEEDS.iter().enumerate() {
+            let s = simulate_species(*seed, ci, 8, seconds, life);
+            scores[i] = score_species(&s, ci, life);
+            polar[i] = s.polar;
+            nnd[i] = s.mean_nnd_bl;
+        }
+        Confirm {
+            score: median3(scores),
+            polar: median3(polar),
+            nnd: median3(nnd),
+        }
+    }
+
+    #[test]
+    fn confirm_median_rejects_single_seed_spike() {
+        assert!((median3([1.0, 9.0, 2.0]) - 2.0).abs() < 1e-12);
+        let c = confirm_species(14, 16.0, &LIFE);
+        assert!(c.polar > 0.64, "LIFE shrimp confirm polar {}", c.polar);
+        assert!(c.nnd < 1.50, "LIFE shrimp confirm nnd {}", c.nnd);
+    }
+
     /// 观察 → 记录 → 演化 → 再观察。
-    /// OBSERVE_CI=14|shrimp 只训列出的种；不设则仍 17 种轮转。
+    /// OBSERVE_CI=14|shrimp|jets|loose|all 只训列出的种。
     /// OBSERVE_LOCK_SPACE=1 冻结 space；OBSERVE_ALIGN_ONLY=1 只动 slip/zone（不对 yaw）。
-    /// 默认不加载顶满 space 的 best.rs（OBSERVE_LOAD_BEST=1 才合并未触顶的行）。
+    /// 接受冠军前用种子 7/11/19 的中位数确认，避免单次评估噪声。
     #[test]
     #[ignore]
     fn observe_record_optimize_loop() {
@@ -2532,33 +2635,6 @@ mod tests {
                 std::env::var(key).ok().as_deref().map(str::trim),
                 Some("1") | Some("true") | Some("yes") | Some("TRUE")
             )
-        }
-        fn parse_roster() -> Vec<usize> {
-            let raw = std::env::var("OBSERVE_CI").unwrap_or_default();
-            let raw = raw.trim();
-            if raw.is_empty() {
-                return (0..LifeParams::N_SPECIES).collect();
-            }
-            let mut out = Vec::new();
-            for part in raw.split(',') {
-                let p = part.trim();
-                if p.eq_ignore_ascii_case("shrimp") {
-                    if !out.contains(&14) {
-                        out.push(14);
-                    }
-                    continue;
-                }
-                if let Ok(i) = p.parse::<usize>() {
-                    if i < LifeParams::N_SPECIES && !out.contains(&i) {
-                        out.push(i);
-                    }
-                }
-            }
-            if out.is_empty() {
-                vec![14]
-            } else {
-                out
-            }
         }
 
         let hours: f64 = std::env::var("OBSERVE_HOURS")
@@ -2575,7 +2651,7 @@ mod tests {
             .and_then(|s| s.parse().ok())
             .unwrap_or(16.0);
         let eval_s = eval_s.clamp(3.0, 24.0);
-        let roster = parse_roster();
+        let roster = parse_observe_roster(&std::env::var("OBSERVE_CI").unwrap_or_default());
         let search = SpeciesSearch {
             lock_space: env_flag("OBSERVE_LOCK_SPACE"),
             align_only: env_flag("OBSERVE_ALIGN_ONLY"),
@@ -2631,8 +2707,29 @@ mod tests {
             }
         }
         let mut champ_sc = [f64::NEG_INFINITY; LifeParams::N_SPECIES];
+        let mut champ_polar = [-1.0f64; LifeParams::N_SPECIES];
         let mut cmas: Vec<Option<SpeciesCma>> = (0..LifeParams::N_SPECIES).map(|_| None).collect();
         let mut cycle = 0u32;
+        fn read_cma_ctrl(dir: &std::path::Path, sigma0: f64, gens0: u32) -> (f64, u32) {
+            let mut sigma = sigma0;
+            let mut gens = gens0;
+            if let Ok(s) = std::fs::read_to_string(dir.join("cma-ctrl.txt")) {
+                for line in s.lines() {
+                    let line = line.trim();
+                    if let Some(v) = line.strip_prefix("sigma=") {
+                        if let Ok(x) = v.trim().parse::<f64>() {
+                            sigma = x.clamp(0.12, 0.72);
+                        }
+                    }
+                    if let Some(v) = line.strip_prefix("gens=") {
+                        if let Ok(x) = v.trim().parse::<u32>() {
+                            gens = x.clamp(6, 24);
+                        }
+                    }
+                }
+            }
+            (sigma, gens)
+        }
         println!(
             "observe loop hours={hours} gens/cycle={gens} eval={eval_s:.0}s search=CMA-ES sigma0={sigma0:.2} roster={roster:?} lock_space={} align_only={} dir={}",
             search.lock_space,
@@ -2683,8 +2780,10 @@ mod tests {
                     turned,
                 )
             };
-            if spec_sc > champ_sc[ci] {
-                champ_sc[ci] = spec_sc;
+            let parent_c = confirm_species(ci, spec_eval, &parent);
+            if champ_sc[ci].is_infinite() {
+                champ_sc[ci] = parent_c.score;
+                champ_polar[ci] = parent_c.polar;
             }
             let elapsed_h = t0.elapsed().as_secs_f64() / 3600.0;
             let sigma_now = cmas[ci].as_ref().map(|c| c.sigma).unwrap_or(0.20);
@@ -2724,44 +2823,74 @@ mod tests {
             }
             let seed = 20260815u32.wrapping_add(cycle.wrapping_mul(17));
             let eval = |p: &LifeParams| {
-                score_species(&simulate_species(seed, ci, 8, spec_eval, p), ci, p)
+                let a = score_species(&simulate_species(seed, ci, 8, spec_eval, p), ci, p);
+                let b = score_species(
+                    &simulate_species(seed.wrapping_add(3), ci, 8, spec_eval, p),
+                    ci,
+                    p,
+                );
+                0.5 * (a + b)
             };
+            let (ctrl_sigma, ctrl_gens) = read_cma_ctrl(&dir, sigma0, gens);
             if cmas[ci].is_none() {
-                cmas[ci] = Some(SpeciesCma::from_life(&parent, ci, search, sigma0));
+                cmas[ci] = Some(SpeciesCma::from_life(&parent, ci, search, ctrl_sigma));
             } else if cmas[ci].as_ref().is_some_and(|c| c.sigma <= 0.05) {
                 println!(
                     "CMA restart {id} sigma collapsed; inflate to {:.2} (restarts were {})",
-                    (sigma0 * 1.15).min(0.65),
+                    ctrl_sigma.max(sigma0 * 1.15).min(0.65),
                     cmas[ci].as_ref().map(|c| c.restarts).unwrap_or(0)
                 );
                 cmas[ci] = Some(SpeciesCma::from_life(
                     &parent,
                     ci,
                     search,
-                    (sigma0 * 1.15).min(0.65),
+                    ctrl_sigma.max(sigma0 * 1.15).min(0.65),
                 ));
+            } else {
+                let before = cmas[ci].as_ref().map(|c| c.sigma).unwrap_or(0.0);
+                cmas[ci].as_mut().expect("cma").inflate_to(ctrl_sigma);
+                let after = cmas[ci].as_ref().map(|c| c.sigma).unwrap_or(0.0);
+                if after > before + 1e-6 {
+                    println!("CMA inflate {id} sigma {before:.3} -> {after:.3} gens={ctrl_gens}");
+                }
             }
             let (cand, _) = cmas[ci]
                 .as_mut()
                 .expect("cma")
-                .run(parent, ci, gens, seed, eval);
-            let cand_sc = score_species(
-                &simulate_species(seed.wrapping_add(1), ci, 8, spec_eval + 2.0, &cand),
-                ci,
-                &cand,
-            );
+                .run(parent, ci, ctrl_gens, seed, eval);
+            let cand_c = confirm_species(ci, spec_eval, &cand);
             let sigma_ci = cmas[ci].as_ref().map(|c| c.sigma).unwrap_or(0.0);
-            if cand_sc > champ_sc[ci] + 1e-4 {
+            let polar_ok = if ci == 14 {
+                cand_c.polar >= 0.68 && cand_c.polar + 0.03 >= parent_c.polar
+            } else if SPECIES_BIO[ci].w_polar > 0.0 {
+                cand_c.polar <= SPECIES_BIO[ci].polar + 0.38
+                    && cand_c.polar <= parent_c.polar + 0.04
+            } else {
+                true
+            };
+            if cand_c.score > champ_sc[ci] + 1e-4 && polar_ok {
                 println!(
-                    "new champion {id} {:.3} -> {cand_sc:.3} sigma={:.3}",
-                    champ_sc[ci], sigma_ci
+                    "new champion {id} {:.3} -> {:.3} polar {:.2}->{:.2} nnd {:.2}->{:.2} sigma={:.3}",
+                    champ_sc[ci],
+                    cand_c.score,
+                    parent_c.polar,
+                    cand_c.polar,
+                    parent_c.nnd,
+                    cand_c.nnd,
+                    sigma_ci
                 );
                 parent.kinds[ci] = cand.kinds[ci];
-                champ_sc[ci] = cand_sc;
+                champ_sc[ci] = cand_c.score;
+                champ_polar[ci] = cand_c.polar;
+            } else if !polar_ok {
+                println!(
+                    "reject {id} confirm={:.3} polar={:.2} parent_p={:.2} nnd={:.2} sigma={:.3}",
+                    cand_c.score, cand_c.polar, parent_c.polar, cand_c.nnd, sigma_ci
+                );
             } else {
                 println!(
-                    "keep champion {id} {:.3} cand={cand_sc:.3} sigma={:.3}",
-                    champ_sc[ci], sigma_ci
+                    "keep champion {id} {:.3} confirm={:.3} polar={:.2} sigma={:.3}",
+                    champ_sc[ci], cand_c.score, cand_c.polar, sigma_ci
                 );
             }
             cycle += 1;

@@ -10,3 +10,4 @@ build/
 .cache/
 native/target/
 native/.cargo/
+data/ethology/*.csv
