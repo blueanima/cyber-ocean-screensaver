@@ -1,18 +1,38 @@
 # 赛博海洋馆屏幕保护 / Cyber Ocean Screensaver
 
-赛博海洋馆是一款跨平台**屏幕保护程序**和**动态壁纸**：公式生成的浮蚕、水母、栉水母、磷虾、海天使在深蓝海里游动，白点勾勒，互相躲开。支持 Linux AppImage、Windows `.scr`、macOS。
+电脑一闲，桌面变成公式生成的深海：磷虾排队，水母喷水。Linux / Windows 屏保，下载就能开。
 
-**Cyber Ocean Screensaver** is a cross-platform **screensaver** and **live wallpaper**. Parametric sea-life — jellyfish, comb jellies, krill, worms, sea angels — swim as white particles on deep navy water. Linux, Windows, and macOS. Python gallery plus a native Rust / wgpu engine.
+Idle the desktop into a parametric deep sea — krill school, jellies jet. Linux AppImage, Windows `.scr`, macOS.
 
-## 1.0.3
+**[下载最新版 Latest](https://github.com/blueanima/cyber-ocean-screensaver/releases/latest)**
+·
+**[Linux AppImage](https://github.com/blueanima/cyber-ocean-screensaver/releases/download/v1.0.4/CyberOcean-1.0.4-x86_64.AppImage)**
+·
+**[Windows 屏保 .scr](https://github.com/blueanima/cyber-ocean-screensaver/releases/download/v1.0.4/CyberOcean.scr)**
+·
+**[浏览器 HTML](https://github.com/blueanima/cyber-ocean-screensaver/releases/download/v1.0.4/screensaver.html)**
 
-同种磷虾会在定向圈里对齐航向：圈内跟邻居平均朝向，圈外弱吸引。默认 `slip=0.174`、`zone=1.614`。
+Windows：下载 `.scr` 后右键 **安装**。Linux：`chmod +x CyberOcean-*-x86_64.AppImage && ./CyberOcean-*-x86_64.AppImage`
 
-Same-species krill now align inside an orientation zone — they match neighbors' heading inside the zone and only attract weakly outside it. Defaults: `slip=0.174`, `zone=1.614`.
+Windows: right-click the `.scr` → **Install**. Linux: mark the AppImage executable, then run it.
+
+![屏保画面 / Screensaver](docs/screenshots/ocean.png)
+
+循环短片稍后放到 `docs/screenshots/demo.gif`（现在用静图占位）。
+
+Looping clip will live at `docs/screenshots/demo.gif` (still frame for now).
+
+公式生成的浮蚕、水母、栉水母、磷虾、海天使在深蓝海里游动，白点勾勒，互相躲开。Python 集合馆 + Rust / wgpu 原生引擎。
+
+Parametric sea-life as white particles on deep navy water. Python gallery plus a native Rust / wgpu engine.
+
+## 1.0.4
+
+磷虾在定向圈里对齐更紧；松散种少跟航向，群看起来不那么齐。
+
+Krill align more tightly in the orientation zone; looser species match heading less, so schools look less locked.
 
 ## 截图 / Screenshots
-
-![赛博海洋与动态图例 / Cyber ocean with live legend](docs/screenshots/ocean.png)
 
 屏保和壁纸模式：左上角图例为中英对照，剪影随生物一起游动。
 
@@ -30,7 +50,7 @@ Gallery HUD is bilingual. Click a legend row to pulse that creature.
 
 Yellow line is the spine; red is head, cyan is tail. Flowers, wheels, and stars have no head. Swimming locks to this axis.
 
-## 快速开始 / Quick start
+## 从源码运行 / Run from source
 
 ```bash
 git clone https://github.com/blueanima/cyber-ocean-screensaver.git
