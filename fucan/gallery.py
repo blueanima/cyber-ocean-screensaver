@@ -170,6 +170,8 @@ INDEX_HTML = r"""<!DOCTYPE html>
   var SHOT = /(?:[?&]shot=1\b)/.test(location.search);
   var seedMatch = location.search.match(/[?&]seed=(\d+)/);
   var FIXED_SEED = seedMatch ? (parseInt(seedMatch[1], 10) >>> 0) : null;
+  var warmMatch = location.search.match(/[?&]warm=(\d+)/);
+  var WARM = warmMatch ? Math.max(0, parseInt(warmMatch[1], 10) || 0) : 160;
   var MAX = 42000;
   var FILL_STEP = 1;
   var outX = new Float32Array(MAX);
@@ -1378,7 +1380,7 @@ INDEX_HTML = r"""<!DOCTYPE html>
     cv.height = (window.innerHeight * dpr0) | 0;
     playing = true;
     var wi;
-    for (wi = 0; wi < 160; wi++) drawOcean(cv.width, cv.height, dpr0, 1 / 40);
+    for (wi = 0; wi < WARM; wi++) drawOcean(cv.width, cv.height, dpr0, 1 / 40);
     return;
   }
   requestAnimationFrame(draw);

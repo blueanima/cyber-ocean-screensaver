@@ -8,19 +8,15 @@ Idle the desktop into a parametric deep sea — krill school, jellies jet. Linux
 ·
 **[Linux AppImage](https://github.com/blueanima/cyber-ocean-screensaver/releases/download/v1.0.4/CyberOcean-1.0.4-x86_64.AppImage)**
 ·
-**[Windows 屏保 .scr](https://github.com/blueanima/cyber-ocean-screensaver/releases/download/v1.0.4/CyberOcean.scr)**
+**[Windows 屏保 .scr](https://github.com/blueanima/cyber-ocean-screensaver/releases/download/v1.0.4/CyberOcean-1.0.4-windows.scr)**
 ·
 **[浏览器 HTML](https://github.com/blueanima/cyber-ocean-screensaver/releases/download/v1.0.4/screensaver.html)**
 
-Windows：下载 `.scr` 后右键 **安装**。Linux：`chmod +x CyberOcean-*-x86_64.AppImage && ./CyberOcean-*-x86_64.AppImage`
+Windows：`.scr` 右键 **安装**。macOS 的 `CyberOcean.app` zip、Windows 原生 `.exe` 由发版流程打出，见最新 Release。Linux：`chmod +x CyberOcean-*-x86_64.AppImage && ./CyberOcean-*-x86_64.AppImage`
 
-Windows: right-click the `.scr` → **Install**. Linux: mark the AppImage executable, then run it.
+Windows: right-click the `.scr` → **Install**. macOS `.app` zip and Windows native `.exe` come from the release workflow. Linux: mark the AppImage executable, then run it.
 
-![屏保画面 / Screensaver](docs/screenshots/ocean.png)
-
-循环短片稍后放到 `docs/screenshots/demo.gif`（现在用静图占位）。
-
-Looping clip will live at `docs/screenshots/demo.gif` (still frame for now).
+![屏保循环 / Screensaver loop](docs/screenshots/demo.gif)
 
 公式生成的浮蚕、水母、栉水母、磷虾、海天使在深蓝海里游动，白点勾勒，互相躲开。Python 集合馆 + Rust / wgpu 原生引擎。
 
@@ -37,6 +33,8 @@ Krill align more tightly in the orientation zone; looser species match heading l
 屏保和壁纸模式：左上角图例为中英对照，剪影随生物一起游动。
 
 Screensaver and wallpaper: bilingual legend, live silhouettes, lock-on line to the highlighted creature.
+
+![赛博海洋与动态图例 / Cyber ocean with live legend](docs/screenshots/ocean.png)
 
 ![集合馆 / Gallery](docs/screenshots/gallery.png)
 
@@ -84,9 +82,11 @@ GitHub Actions builds packages when you push a `v*` tag or run the workflow by h
 
 | 文件 | 说明 | Notes |
 | --- | --- | --- |
-| `CyberOcean-*-x86_64.AppImage` | Linux 可直接运行（内置 Python） | Linux, bundled Python |
+| `CyberOcean-*-x86_64.AppImage` | Linux 可直接运行 | Linux, bundled Python + native |
+| `CyberOcean-*-windows.exe` | Windows 原生 wgpu | Windows native ocean |
+| `CyberOcean-*-windows.scr` | Windows 系统屏保（右键安装） | Windows screensaver |
+| `CyberOcean-*-macOS.zip` | macOS `CyberOcean.app` | macOS app bundle |
 | `CyberOcean-portable-*.zip` | 跨平台源码包 + 启动脚本 + 离线 HTML | Portable sources and offline HTML |
-| `CyberOcean.scr` | Windows 屏幕保护 | Windows screensaver |
 | `screensaver.html` / `wallpaper.html` | 双击用浏览器打开 | Open in a browser |
 
 本地打包：

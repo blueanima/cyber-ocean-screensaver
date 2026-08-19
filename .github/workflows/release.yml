@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+
 jobs:
   linux-appimage:
     runs-on: ubuntu-22.04
@@ -26,7 +30,7 @@ jobs:
           if [ "${{ github.ref_type }}" = "tag" ]; then
             export VERSION="${GITHUB_REF_NAME#v}"
           else
-            export VERSION="${GITHUB_SHA::7}"
+            export VERSION="$(tr -d ' \n' < VERSION)"
           fi
           ./scripts/build-release.sh
       - uses: actions/upload-artifact@v4
@@ -48,25 +52,103 @@ jobs:
             dist/wallpaper.html
             dist/SHA256SUMS
 
-  windows-scr:
+  windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Install PyInstaller
-        run: python -m pip install --upgrade pip pyinstaller
-      - name: Build screensaver
-        run: python -m PyInstaller --noconfirm --clean --onefile --noconsole --name CyberOcean main.py
-      - name: Rename to .scr
-        run: Copy-Item dist/CyberOcean.exe dist/CyberOcean.scr
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Version
+        shell: bash
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          else
+            echo "VERSION=$(tr -d ' \n' < VERSION)" >> "$GITHUB_ENV"
+          fi
+      - name: Native wgpu exe
+        working-directory: native
+        run: cargo build --release
+      - name: Screensaver .scr
+        run: |
+          python -m pip install --upgrade pip pyinstaller
+          python -m PyInstaller --noconfirm --clean --onefile --noconsole --distpath pyi-dist --name CyberOcean main.py
+      - name: Stage Windows packages
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp native/target/release/cyber-ocean-native.exe "dist/CyberOcean-${VERSION}-windows.exe"
+          cp pyi-dist/CyberOcean.exe "dist/CyberOcean-${VERSION}-windows.scr"
       - uses: actions/upload-artifact@v4
         with:
-          name: CyberOcean-windows-screensaver
-          path: dist/CyberOcean.scr
+          name: CyberOcean-windows
+          path: |
+            dist/CyberOcean-*-windows.exe
+            dist/CyberOcean-*-windows.scr
       - name: Upload to release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/CyberOcean.scr
+          files: |
+            dist/CyberOcean-*-windows.exe
+            dist/CyberOcean-*-windows.scr
+
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Version
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          else
+            echo "VERSION=$(tr -d ' \n' < VERSION)" >> "$GITHUB_ENV"
+          fi
+      - name: Native wgpu
+        working-directory: native
+        run: cargo build --release
+      - name: Package .app zip
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, textwrap, stat, subprocess
+          ver = os.environ["VERSION"]
+          app = pathlib.Path("dist/CyberOcean.app")
+          macos = app / "Contents" / "MacOS"
+          macos.mkdir(parents=True)
+          (app / "Contents" / "Resources").mkdir(exist_ok=True)
+          dst = macos / "CyberOcean"
+          dst.write_bytes(pathlib.Path("native/target/release/cyber-ocean-native").read_bytes())
+          dst.chmod(dst.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
+          plist = textwrap.dedent(f"""\
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleName</key><string>CyberOcean</string>
+            <key>CFBundleDisplayName</key><string>赛博海洋馆</string>
+            <key>CFBundleIdentifier</key><string>local.cyber.ocean.screensaver</string>
+            <key>CFBundleVersion</key><string>{ver}</string>
+            <key>CFBundleShortVersionString</key><string>{ver}</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleExecutable</key><string>CyberOcean</string>
+            <key>LSMinimumSystemVersion</key><string>11.0</string>
+            <key>NSHighResolutionCapable</key><true/>
+          </dict>
+          </plist>
+          """)
+          (app / "Contents" / "Info.plist").write_text(plist, encoding="utf-8")
+          subprocess.check_call(["zip", "-ry", f"CyberOcean-{ver}-macOS.zip", "CyberOcean.app"], cwd="dist")
+          print("wrote dist/CyberOcean-%s-macOS.zip" % ver)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CyberOcean-macos
+          path: dist/CyberOcean-*-macOS.zip
+      - name: Upload to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/CyberOcean-*-macOS.zip

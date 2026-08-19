@@ -112,7 +112,14 @@ NATIVE_BIN="$ROOT/native/target/release/cyber-ocean-native"
 if command -v cargo >/dev/null 2>&1; then
   echo "==> rust wgpu screensaver"
   export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/native/target}"
-  ( cd "$ROOT/native" && CARGO_NET_OFFLINE=1 cargo build --release )
+  # CI 没有 vendor 缓存，必须在线拉 crate。本地默认离线。
+  # 新版 cargo 只认 true/false，CARGO_NET_OFFLINE=1 会直接报错。
+  if [[ "${CI:-}" == "true" ]]; then
+    unset CARGO_NET_OFFLINE || true
+    ( cd "$ROOT/native" && cargo build --release )
+  else
+    ( cd "$ROOT/native" && CARGO_NET_OFFLINE=true cargo build --release )
+  fi
 fi
 if [[ -x "$NATIVE_BIN" ]]; then
   cp -a "$NATIVE_BIN" "$PORT/cyber-ocean-native"
